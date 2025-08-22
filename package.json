@@ -4,12 +4,17 @@
   "description": "A Slackbot that connects to OpenAI Assistants API and responds to channel posts.",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
   "dependencies": {
     "@slack/bolt": "^3.15.0",
     "axios": "^1.10.0",
     "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3",
     "openai": "^4.21.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
   }
 }

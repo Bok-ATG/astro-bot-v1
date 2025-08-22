@@ -1,156 +1,177 @@
+// main bot entry point - all the pieces come together here
+
 require('dotenv').config();
 const { App } = require('@slack/bolt');
-const { OpenAI } = require('openai');
 
-console.log('SLACK_SIGNING_SECRET_DEV:', process.env.SLACK_SIGNING_SECRET_DEV);
-const slackApp = new App({
-  token: process.env.SLACK_BOT_TOKEN,
-  signingSecret: process.env.SLACK_SIGNING_SECRET,
-  socketMode: true,
-  appToken: process.env.SLACK_APP_TOKEN,
-});
+// grab all our fancy modules
+const log = require('./src/utils/log');
+const TextbookBot = require('./src/bots/textbook-bot');
+const VisionBot = require('./src/bots/vision-bot');
+const SummaryBot = require('./src/bots/summary-bot');
+const MessageHandlers = require('./src/handlers/message.handlers');
+const EventHandlers = require('./src/handlers/event.handlers');
+const ActionHandlers = require('./src/handlers/action.handlers');
 
-const SLACK_CHANNEL_ID = process.env.SLACK_CHANNEL_ID;
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-const ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID;
-
-// Store thread mapping (Slack thread_ts <-> OpenAI thread_id)
-const threadMap = new Map();
-
-async function getOrCreateOpenAIThread(slackThreadTs) {
-  if (threadMap.has(slackThreadTs)) {
-    return threadMap.get(slackThreadTs);
+class AstroQABot {
+  constructor() {
+    this.slackApp = new App({
+      token: process.env.SLACK_BOT_TOKEN,
+      signingSecret: process.env.SLACK_SIGNING_SECRET,
+      socketMode: true,
+      appToken: process.env.SLACK_APP_TOKEN,
+    });
+    
+    this.initializeBots();
+    this.initializeHandlers();
+    this.setupEventListeners();
   }
-  const thread = await openai.beta.threads.create();
-  threadMap.set(slackThreadTs, thread.id);
-  return thread.id;
+
+  // wake up the bots
+  initializeBots() {
+    log.info('Initializing bot modules...');
+    
+    this.textbookBot = new TextbookBot();
+    this.visionBot = new VisionBot();
+    this.summaryBot = new SummaryBot(this.slackApp.client);
+    
+    log.success('All bot modules initialized successfully');
+  }
+
+  // set up the message routing system
+  initializeHandlers() {
+    log.info('Initializing handler modules...');
+    
+    this.messageHandlers = new MessageHandlers(
+      this.textbookBot,
+      this.visionBot,
+      this.summaryBot,
+      this.slackApp.client
+    );
+    
+    this.eventHandlers = new EventHandlers(
+      this.textbookBot,
+      this.visionBot,
+      this.summaryBot,
+      this.slackApp.client
+    );
+    
+    this.actionHandlers = new ActionHandlers(
+      this.textbookBot,
+      this.visionBot,
+      this.summaryBot,
+      this.slackApp.client
+    );
+    
+    log.success('All handler modules initialized successfully');
+  }
+
+  // tell slack what we care about
+  setupEventListeners() {
+    log.info('Setting up Slack event listeners...');
+    
+    this.slackApp.event('message', async ({ event, client }) => {
+      await this.messageHandlers.handleMessage(event, client);
+    });
+    
+    this.slackApp.event('app_mention', async ({ event, client }) => {
+      await this.messageHandlers.handleAppMention(event, client);
+    });
+    
+    this.slackApp.event('reaction_added', async ({ event, client }) => {
+      await this.eventHandlers.handleReactionAdded(event, client);
+    });
+    
+    this.slackApp.event('member_joined_channel', async ({ event, client }) => {
+      await this.eventHandlers.handleMemberJoinedChannel(event, client);
+    });
+    
+    this.slackApp.event('file_shared', async ({ event, client }) => {
+      await this.eventHandlers.handleFileShared(event, client);
+    });
+    
+    this.slackApp.event('team_join', async ({ event, client }) => {
+      await this.eventHandlers.handleTeamJoin(event, client);
+    });
+    
+    this.slackApp.command('/generate-summary', async ({ command, ack, client }) => {
+      await this.actionHandlers.handleSlashCommand(command, ack, client);
+    });
+    
+    this.slackApp.command('/bot-stats', async ({ command, ack, client }) => {
+      await this.actionHandlers.handleSlashCommand(command, ack, client);
+    });
+    
+    this.slackApp.command('/help', async ({ command, ack, client }) => {
+      await this.actionHandlers.handleSlashCommand(command, ack, client);
+    });
+    
+    this.slackApp.action(/.*/, async ({ action, ack, client }) => {
+      if (action.type === 'button') {
+        await this.actionHandlers.handleButtonClick(action, ack, client);
+      } else if (action.type === 'static_select') {
+        await this.actionHandlers.handleSelectMenu(action, ack, client);
+      }
+    });
+    
+    log.success('Event listeners configured successfully');
+  }
+
+  // fire it up
+  async start() {
+    try {
+      log.separator();
+      log.startup('Starting Astro QA Bot...');
+      
+      await this.slackApp.start();
+      
+      log.success('Astro QA Bot is now live and ready!');
+      log.info('Bot capabilities:');
+      log.info('  Text Q&A via OpenAI Assistant');
+      log.info('  Image question extraction');
+      log.info('  Channel activity summaries');
+      log.info('  Conversation thread management');
+      log.separator();
+      
+      // housekeeping - clean up old threads every hour
+      setInterval(() => {
+        this.textbookBot.cleanupOldThreads();
+      }, 60 * 60 * 1000);
+      
+    } catch (error) {
+      log.error('Failed to start Astro QA Bot', error);
+      process.exit(1);
+    }
+  }
+
+  // shut down nicely when asked
+  async shutdown() {
+    log.info('Shutting down Astro QA Bot...');
+    
+    try {
+      await this.slackApp.stop();
+      log.success('Bot shutdown completed successfully');
+    } catch (error) {
+      log.error('Error during shutdown', error);
+    }
+  }
 }
 
-slackApp.event('message', async ({ event, client }) => {
-  try {
-    // Only respond in the specified channel
-    if (event.channel !== SLACK_CHANNEL_ID) return;
-    // Ignore bot messages
-    if (event.subtype === 'bot_message' || event.bot_id) return;
+const bot = new AstroQABot();
 
-    const slackThreadTs = event.thread_ts || event.ts;
-
-    // If the message contains files (e.g., images)
-    if (event.files && event.files.length > 0) {
-      for (const file of event.files) {
-        if (file.mimetype && file.mimetype.startsWith('image/')) {
-          // Download the image (requires Slack user token)
-          const imageUrl = file.url_private;
-          const axios = require('axios');
-          const imageResponse = await axios.get(imageUrl, {
-            responseType: 'arraybuffer',
-            headers: { Authorization: `Bearer ${process.env.SLACK_USER_TOKEN}` },
-          });
-          const imageBuffer = Buffer.from(imageResponse.data, 'binary');
-
-          // Send image to OpenAI Vision model for text extraction
-          const visionResponse = await openai.chat.completions.create({
-            model: 'gpt-4o',
-            messages: [
-              {
-                role: 'user',
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Extract any questions from this image. If there is a question, return only the question text. If not, reply: NO_QUESTION_FOUND.'
-                  },
-                  {
-                    type: 'image_url',
-                    image_url: {
-                      url: `data:${file.mimetype};base64,${imageBuffer.toString('base64')}`,
-                      detail: 'auto'
-                    }
-                  }
-                ]
-              }
-            ],
-            max_tokens: 1000
-          });
-
-          const visionText = visionResponse.choices[0]?.message?.content?.trim();
-          if (visionText && visionText !== 'NO_QUESTION_FOUND') {
-            // Process as a normal user message
-            const openaiThreadId = await getOrCreateOpenAIThread(slackThreadTs);
-            await openai.beta.threads.messages.create(openaiThreadId, {
-              role: 'user',
-              content: visionText,
-            });
-            const run = await openai.beta.threads.runs.create(openaiThreadId, {
-              assistant_id: ASSISTANT_ID,
-            });
-            let runStatus;
-            do {
-              await new Promise(res => setTimeout(res, 1500));
-              runStatus = await openai.beta.threads.runs.retrieve(openaiThreadId, run.id);
-            } while (runStatus.status !== 'completed' && runStatus.status !== 'failed' && runStatus.status !== 'cancelled');
-            if (runStatus.status === 'completed') {
-              const messages = await openai.beta.threads.messages.list(openaiThreadId, { limit: 1, order: 'desc' });
-              const assistantReply = messages.data[0]?.content[0]?.text?.value || "Sorry, I couldn't generate a reply.";
-              await client.chat.postMessage({
-                channel: event.channel,
-                thread_ts: slackThreadTs,
-                text: assistantReply,
-              });
-            } else {
-              await client.chat.postMessage({
-                channel: event.channel,
-                thread_ts: slackThreadTs,
-                text: "Sorry, I couldn't generate a reply (run failed).",
-              });
-            }
-            return;
-          }
-        }
-      }
-    }
-
-    // If the message is plain text
-    if (event.text && event.text.trim().length > 0) {
-      const userMessage = event.text;
-      const openaiThreadId = await getOrCreateOpenAIThread(slackThreadTs);
-      await openai.beta.threads.messages.create(openaiThreadId, {
-        role: 'user',
-        content: userMessage,
-      });
-      const run = await openai.beta.threads.runs.create(openaiThreadId, {
-        assistant_id: ASSISTANT_ID,
-      });
-      let runStatus;
-      do {
-        await new Promise(res => setTimeout(res, 1500));
-        runStatus = await openai.beta.threads.runs.retrieve(openaiThreadId, run.id);
-      } while (runStatus.status !== 'completed' && runStatus.status !== 'failed' && runStatus.status !== 'cancelled');
-      if (runStatus.status === 'completed') {
-        const messages = await openai.beta.threads.messages.list(openaiThreadId, { limit: 1, order: 'desc' });
-        const assistantReply = messages.data[0]?.content[0]?.text?.value || "Sorry, I couldn't generate a reply.";
-        await client.chat.postMessage({
-          channel: event.channel,
-          thread_ts: slackThreadTs,
-          text: assistantReply,
-        });
-      } else {
-        await client.chat.postMessage({
-          channel: event.channel,
-          thread_ts: slackThreadTs,
-          text: "Sorry, I couldn't generate a reply (run failed).",
-        });
-      }
-    }
-  } catch (error) {
-    console.error(error);
-  }
+// handle ctrl+c and other shutdown signals gracefully
+process.on('SIGINT', async () => {
+  log.info('Received SIGINT, initiating shutdown...');
+  await bot.shutdown();
+  process.exit(0);
 });
 
-(async () => {
-  await slackApp.start();
-  console.log('⚡️ Slack OpenAI Assistant bot is running (socket mode)!');
-})();
+process.on('SIGTERM', async () => {
+  log.info('Received SIGTERM, initiating-* shutdown...');
+  await bot.shutdown();
+  process.exit(0);
+});
+
+bot.start().catch((error) => {
+  log.error('Fatal error starting bot', error);
+  process.exit(1);
+});
