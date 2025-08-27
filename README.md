@@ -9,9 +9,12 @@ AstroQABot is a Slack application that uses OpenAI's Assistants API to respond t
 - **Textbook Bot**: Answers questions based on uploaded documents
 - **Vision Bot**: Analyzes and describes images shared in channels
 - **Summary Bot**: Generates summaries of channel activity
-- **Interactive Commands**: Responds to slash commands for bot statistics and help
+- **Slash Commands**:
+  - `/generate-summary` - Posts a summary of recent activity
+  - `/bot-stats` - Shows stats about the bot’s activity
+  - `/help` - Provides a help message listing
 
-The bot uses Socket Mode for real-time event handling and can process files, messages, and user interactions.
+The bot uses Slack's [socket mode](https://api.slack.com/apis/socket-mode) for event handling, which does not require exposing a public HTTP Request URL.
 
 ## Quickstart
 
@@ -33,7 +36,7 @@ The bot uses Socket Mode for real-time event handling and can process files, mes
    ```bash
    cp .env.sample .env
    ```
-   Edit the `.env` file with your actual values (see Environment Variables section below).
+   Edit the `.env` file with your actual values (see *Environment Variables* section below).
 
 3. **Choose your deployment method:**
 
@@ -47,6 +50,22 @@ The bot uses Socket Mode for real-time event handling and can process files, mes
    ```bash
    docker compose up
    ```
+
+## Environment Variables
+
+Create a `.env` file based on `.env.sample` with the following variables:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `SLACK_CLIENT_ID` | Slack app client ID | Found in "Basic Information" |
+| `SLACK_CLIENT_SECRET` | Slack app client secret | Found in "Basic Information" |
+| `SLACK_SIGNING_SECRET` | Used to verify requests from Slack | Found in "Basic Information" |
+| `SLACK_APP_TOKEN` | App-level token for Socket Mode | Found in "Basic Information" > "App-Level Tokens" |
+| `SLACK_BOT_TOKEN` | Bot user OAuth token | Found in "OAuth & Permissions" |
+| `OPENAI_API_KEY` | OpenAI API secret key | Found in OpenAI platform > "API Keys" |
+| `OPENAI_ASSISTANT_ID` | ID of your OpenAI Assistant | Found in Assistants Playground |
+| `SLACK_CHANNEL_ID` | Default channel for bot operations | Found in Slack channel URL or settings |
+
 
 ## Slack Setup
 
@@ -121,17 +140,3 @@ The bot requires the following OAuth scopes (configured in the manifest):
    -
 3. **Copy the Assistant ID** (starts with `asst_`)
 
-## Environment Variables
-
-Create a `.env` file based on `.env.sample` with the following variables:
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `SLACK_CLIENT_ID` | Slack app client ID | Found in "Basic Information" |
-| `SLACK_CLIENT_SECRET` | Slack app client secret | Found in "Basic Information" |
-| `SLACK_SIGNING_SECRET` | Used to verify requests from Slack | Found in "Basic Information" |
-| `SLACK_APP_TOKEN` | App-level token for Socket Mode | Found in "Basic Information" > "App-Level Tokens" |
-| `SLACK_BOT_TOKEN` | Bot user OAuth token | Found in "OAuth & Permissions" |
-| `OPENAI_API_KEY` | OpenAI API secret key | Found in OpenAI platform > "API Keys" |
-| `OPENAI_ASSISTANT_ID` | ID of your OpenAI Assistant | Found in Assistants Playground |
-| `SLACK_CHANNEL_ID` | Default channel for bot operations | Found in Slack channel URL or settings |
