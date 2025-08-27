@@ -1,10 +1,10 @@
-# AstroQABot
+# AstroBot
 
-A Slack bot that integrates with OpenAI's Assistants API to provide Q&A, document analysis, and automated summaries in Slack channels.
+A Slack bot that integrates with OpenAI's Assistants API to answer student questions using textbook documents. Designed for use in public channels where students can ask questions and see responses.
 
 ## Overview
 
-AstroQABot is a Slack application that uses OpenAI's Assistants API to respond to messages and events. The bot has three main components:
+AstroBot is a Slack application that uses OpenAI's Assistants API to respond to messages and events. The bot has three main components:
 
 - **Textbook Bot**: Answers questions based on uploaded documents
 - **Vision Bot**: Analyzes and describes images shared in channels

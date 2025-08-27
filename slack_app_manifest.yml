@@ -1,8 +1,8 @@
 display_information:
-  name: AstroQABot
+  name: AstroBot
 features:
   bot_user:
-    display_name: AstroQABot
+    display_name: AstroBot
     always_online: false
   slash_commands:
     - command: /generate-summary
