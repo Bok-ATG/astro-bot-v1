@@ -2,6 +2,7 @@
 
 require('dotenv').config();
 const { App } = require('@slack/bolt');
+const http = require('http');
 
 // grab all our fancy modules
 const log = require('./src/utils/log');
@@ -21,9 +22,12 @@ class AstroQABot {
       appToken: process.env.SLACK_APP_TOKEN,
     });
 
+    this.isStarted = false;
+    this.healthCheckServer = null;
     this.initializeBots();
     this.initializeHandlers();
     this.setupEventListeners();
+    this.setupHealthCheck();
   }
 
   // wake up the bots
@@ -116,13 +120,74 @@ class AstroQABot {
     log.success('Event listeners configured successfully');
   }
 
-  // fire it up
+  // health check that verifies slack connectivity using auth.test API call
+  // this approach tests actual functionality rather than internal connection state
+  async checkSlackHealth() {
+    try {
+      // auth.test verifies token validity, network connectivity, and slack API availability
+      await this.slackApp.client.auth.test();
+      return true;
+    } catch (error) {
+      log.error('Slack health check failed:', error.message);
+      return false;
+    }
+  }
+
+  // health check endpoint for docker container monitoring
+  setupHealthCheck() {
+    const port = process.env.HEALTH_CHECK_PORT || 3000;
+
+    this.healthCheckServer = http.createServer(async (req, res) => {
+      if (req.url === '/health' && req.method === 'GET') {
+
+        if (!this.isStarted) {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            status: 'unhealthy',
+            reason: 'application not started',
+            timestamp: new Date().toISOString()
+          }));
+          return;
+        }
+
+        // test actual slack connectivity
+        const slackHealthy = await this.checkSlackHealth();
+
+        if (slackHealthy) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            status: 'healthy',
+            timestamp: new Date().toISOString()
+          }));
+        } else {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            status: 'unhealthy',
+            reason: 'slack connectivity failed',
+            timestamp: new Date().toISOString()
+          }));
+        }
+      } else {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found');
+      }
+    });
+
+    this.healthCheckServer.listen(port, () => {
+      log.info(`Health check endpoint listening on port ${port}`);
+    });
+  }
+
+  // start the slack application
   async start() {
     try {
       log.separator();
       log.startup('Starting AstroBot...');
 
       await this.slackApp.start();
+
+      // mark as started once slack app is running
+      this.isStarted = true;
 
       log.success('AstroBot is now live and ready!');
       log.info('Bot capabilities:');
@@ -139,15 +204,24 @@ class AstroQABot {
 
     } catch (error) {
       log.error('Failed to start AstroBot', error);
+      this.isStarted = false;
       process.exit(1);
     }
   }
 
-  // shut down nicely when asked
+  // graceful shutdown handler
   async shutdown() {
     log.info('Shutting down AstroBot...');
 
+    // mark as stopped immediately
+    this.isStarted = false;
+
     try {
+      if (this.healthCheckServer) {
+        this.healthCheckServer.close();
+        log.info('Health check server stopped');
+      }
+
       await this.slackApp.stop();
       log.success('Bot shutdown completed successfully');
     } catch (error) {
