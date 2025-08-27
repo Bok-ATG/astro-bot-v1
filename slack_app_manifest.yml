@@ -1,0 +1,44 @@
+display_information:
+  name: AstroQABot
+features:
+  bot_user:
+    display_name: AstroQABot
+    always_online: false
+  slash_commands:
+    - command: /generate-summary
+      description: Generates and posts a summary of recent activity
+      should_escape: false
+    - command: /bot-stats
+      description: Displays statistics about the bot’s activity
+      should_escape: false
+    - command: /help
+      description: Provides a help message listing the bot’s features
+      should_escape: false
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read
+      - channels:history
+      - channels:read
+      - chat:write
+      - chat:write.public
+      - commands
+      - files:read
+      - groups:history
+      - groups:read
+      - reactions:read
+      - users:read
+      - mpim:read
+settings:
+  event_subscriptions:
+    bot_events:
+      - app_mention
+      - file_shared
+      - member_joined_channel
+      - reaction_added
+      - team_join
+  interactivity:
+    is_enabled: true
+  org_deploy_enabled: false
+  socket_mode_enabled: true
+  token_rotation_enabled: false
