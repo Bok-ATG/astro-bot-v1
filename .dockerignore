@@ -1,1 +1,27 @@
-**/.env
+# Environment files
+**/.env*
+!.env.sample
+
+# Development files
+node_modules
+npm-debug.log*
+.git
+.gitignore
+README.md
+docker-compose*.yml
+Dockerfile*
+
+# IDE files
+.vscode
+.idea
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs and temp files
+logs
+*.log
+tmp
+*.tmp
+*.temp
