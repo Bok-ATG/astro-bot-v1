@@ -9,16 +9,16 @@ class ActionHandlers {
     this.summaryBot = summaryBot;
     this.slackClient = slackClient;
     this.channelId = process.env.SLACK_CHANNEL_ID;
-    
+
     log.info('slash commands and buttons ready to go');
   }
 
   // main slash command router
   async handleSlashCommand(command, ack, client) {
     try {
-      await ack(); 
-      
-      log.slack('Slash command received', { 
+      await ack();
+
+      log.slack('Slash command received', {
         command: command.command,
         user: command.user_name,
         channel: command.channel_name
@@ -28,22 +28,22 @@ class ActionHandlers {
         case '/generate-summary':
           await this.handleGenerateSummaryCommand(command, client);
           break;
-          
+
         case '/bot-stats':
           await this.handleBotStatsCommand(command, client);
           break;
-          
+
         case '/help':
           await this.handleHelpCommand(command, client);
           break;
-          
+
         default:
           log.warning(`Unknown slash command: ${command.command}`);
           await this.handleUnknownCommand(command, client);
       }
     } catch (error) {
       log.error('Error handling slash command', error);
-      
+
       try {
         await client.chat.postEphemeral({
           channel: command.channel_id,
@@ -58,7 +58,7 @@ class ActionHandlers {
 
   async handleGenerateSummaryCommand(command, client) {
     log.bot('summary', 'Manual summary generation requested via slash command');
-    
+
     await client.chat.postEphemeral({
       channel: command.channel_id,
       user: command.user_id,
@@ -66,17 +66,17 @@ class ActionHandlers {
     });
 
     await this.summaryBot.generateAndPostSummary();
-    
+
     log.success('Summary generation completed via slash command');
   }
 
   async handleBotStatsCommand(command, client) {
     log.info('Bot statistics requested');
-    
+
     try {
       const textbookStats = this.textbookBot.getThreadStats();
       const currentTime = new Date().toISOString();
-      
+
       const statsMessage = `📊 *Bot Statistics*\n\n` +
         `*Active Conversations:* ${textbookStats.activeThreads}\n` +
         `*Textbook Bot:* Ready ✅\n` +
@@ -101,8 +101,8 @@ class ActionHandlers {
 
   async handleHelpCommand(command, client) {
     log.info('Help information requested');
-    
-    const helpMessage = `🤖 *Astro QA Bot Help*\n\n` +
+
+    const helpMessage = `🤖 *AstroBot Help*\n\n` +
       `*How to use me:*\n` +
       `• Ask questions directly in text\n` +
       `• Upload images with questions for analysis\n` +
@@ -137,8 +137,8 @@ class ActionHandlers {
   async handleButtonClick(action, ack, client) {
     try {
       await ack();
-      
-      log.slack('Button interaction', { 
+
+      log.slack('Button interaction', {
         actionId: action.action_id,
         user: action.user.id,
         value: action.value
@@ -148,11 +148,11 @@ class ActionHandlers {
         case 'regenerate_summary':
           await this.handleRegenerateSummary(action, client);
           break;
-          
+
         case 'clear_threads':
           await this.handleClearThreads(action, client);
           break;
-          
+
         default:
           log.warning(`Unknown button action: ${action.action_id}`);
       }
@@ -163,7 +163,7 @@ class ActionHandlers {
 
   async handleRegenerateSummary(action, client) {
     log.bot('summary', 'Summary regeneration requested via button');
-    
+
     await client.chat.postEphemeral({
       channel: action.channel.id,
       user: action.user.id,
@@ -175,9 +175,9 @@ class ActionHandlers {
 
   async handleClearThreads(action, client) {
     log.info('Thread cleanup requested via button');
-    
+
     const cleaned = this.textbookBot.cleanupOldThreads();
-    
+
     await client.chat.postEphemeral({
       channel: action.channel.id,
       user: action.user.id,
@@ -189,8 +189,8 @@ class ActionHandlers {
   async handleSelectMenu(action, ack, client) {
     try {
       await ack();
-      
-      log.slack('Select menu interaction', { 
+
+      log.slack('Select menu interaction', {
         actionId: action.action_id,
         selectedOption: action.selected_option?.value
       });
@@ -199,7 +199,7 @@ class ActionHandlers {
         case 'summary_timeframe':
           await this.handleTimeframeSelection(action, client);
           break;
-          
+
         default:
           log.warning(`Unknown select menu action: ${action.action_id}`);
       }
@@ -211,13 +211,13 @@ class ActionHandlers {
   async handleTimeframeSelection(action, client) {
     const timeframe = action.selected_option.value;
     const hours = parseInt(timeframe);
-    
+
     log.bot('summary', `Custom timeframe selected: ${hours} hours`);
-    
+
     // temp override the timeframe
     const originalHours = this.summaryBot.messageHistoryHours;
     this.summaryBot.messageHistoryHours = hours;
-    
+
     await client.chat.postEphemeral({
       channel: action.channel.id,
       user: action.user.id,
@@ -225,7 +225,7 @@ class ActionHandlers {
     });
 
     await this.summaryBot.generateAndPostSummary();
-    
+
     // put it back
     this.summaryBot.messageHistoryHours = originalHours;
   }
