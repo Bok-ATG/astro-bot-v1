@@ -27,10 +27,10 @@ const SUMMARY_SCHEDULE = process.env.SUMMARY_SCHEDULE || '0 18 * * 1-5'; // 6 PM
 // Development/Debug Configuration
 const NODE_ENV = process.env.NODE_ENV;
 const DEBUG = process.env.DEBUG === 'true';
+const JSON_LOGS = process.env.JSON_LOGS === 'true';
 
 // Derived configurations
 const IS_SOCKET_MODE = SLACK_MODE !== 'http';
-const IS_DEVELOPMENT = NODE_ENV === 'development';
 
 // Required environment variables for validation
 const REQUIRED_ENV_VARS = [
@@ -71,10 +71,10 @@ module.exports = {
   // Development
   NODE_ENV,
   DEBUG,
+  JSON_LOGS,
 
   // Derived
   IS_SOCKET_MODE,
-  IS_DEVELOPMENT,
 
   // Validation
   REQUIRED_ENV_VARS,

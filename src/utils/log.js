@@ -6,6 +6,7 @@ const chalk = require('chalk');
 class Logger {
   constructor() {
     this.startTime = Date.now(); // when did we start this mess?
+    this.useJsonLogs = config.JSON_LOGS;
 
     // Configure chalk based on environment
     // Note: Chalk automatically detects TTY, but we can override for production
@@ -49,7 +50,28 @@ class Logger {
     return data;
   }
 
+  _logStructured(level, message, data = null, error = null) {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      level: level.toUpperCase(),
+      message,
+      ...(data && { data: this._sanitizeData(data) }),
+      ...(error && {
+        error: error instanceof Error
+          ? { message: error.message, stack: error.stack }
+          : this._sanitizeData(error)
+      })
+    };
+
+    console.log(JSON.stringify(logEntry));
+  }
+
   _logWithData(level, levelColor, message, data = null) {
+    if (this.useJsonLogs) {
+      this._logStructured(level, message, data);
+      return;
+    }
+
     const timestamp = this._formatTime();
     console.log(`${chalk.cyan(`[${timestamp}]`)} ${levelColor(level)} ${message}`);
 
@@ -72,6 +94,11 @@ class Logger {
   }
 
   error(message, error = null) {
+    if (this.useJsonLogs) {
+      this._logStructured('ERROR', message, null, error);
+      return;
+    }
+
     const timestamp = this._formatTime();
     console.log(`${chalk.cyan(`[${timestamp}]`)} ${chalk.bold.red('ERROR')} ${message}`);
 
@@ -89,7 +116,7 @@ class Logger {
   }
 
   debug(message, data = null) {
-    if (config.IS_DEVELOPMENT || config.DEBUG) {
+    if (config.DEBUG) {
       this._logWithData('DEBUG', chalk.dim.magenta, message, data);
     }
   }
@@ -107,11 +134,13 @@ class Logger {
   }
 
   startup(message) {
-    const timestamp = this._formatTime();
-    console.log(`\n${chalk.bold.green(`[${timestamp}] ${message}`)}\n`);
+    this.info(message);
   }
 
   separator() {
+    if (this.useJsonLogs) {
+      return;
+    }
     console.log(chalk.dim('─'.repeat(60)));
   }
 }

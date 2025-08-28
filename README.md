@@ -72,9 +72,12 @@ Create a `.env` file based on `.env.sample` with the following variables:
 | `OPENAI_ASSISTANT_ID`   | ID of your OpenAI Assistant            | Yes                        | Both      |
 | `SLACK_CHANNEL_ID`      | Default channel for bot operations     | Yes                        | Both      |
 | `SLACK_MODE`            | Connection mode: `socket` or `http`    | No (default: socket)       | Both      |
+| `HOST`                  | Host address for HTTP mode             | No (default: 0.0.0.0)      | HTTP only |
 | `PORT`                  | Port for HTTP mode                     | No (default: 3000)         | HTTP only |
 | `MESSAGE_HISTORY_HOURS` | Hours of message history for summaries | No (default: 24)           | Both      |
 | `SUMMARY_SCHEDULE`      | Cron schedule for automated summaries  | No (default: 6 PM Mon-Fri) | Both      |
+| `DEBUG`                 | Enable debug logging                   | No (default: false)        | Both      |
+| `JSON_LOGS`             | Output logs in JSON format             | No (default: false)        | Both      |
 
 
 ### Connection Modes
