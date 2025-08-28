@@ -26,7 +26,7 @@ const SUMMARY_SCHEDULE = process.env.SUMMARY_SCHEDULE || '0 18 * * 1-5'; // 6 PM
 
 // Development/Debug Configuration
 const NODE_ENV = process.env.NODE_ENV;
-const DEBUG = process.env.DEBUG === 'true';
+const DEBUG = process.env.ASTROBOT_DEBUG === 'true';
 const JSON_LOGS = process.env.JSON_LOGS === 'true';
 
 // Derived configurations

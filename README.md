@@ -76,7 +76,7 @@ Create a `.env` file based on `.env.sample` with the following variables:
 | `PORT`                  | Port for HTTP mode                     | No (default: 3000)         | HTTP only |
 | `MESSAGE_HISTORY_HOURS` | Hours of message history for summaries | No (default: 24)           | Both      |
 | `SUMMARY_SCHEDULE`      | Cron schedule for automated summaries  | No (default: 6 PM Mon-Fri) | Both      |
-| `DEBUG`                 | Enable debug logging                   | No (default: false)        | Both      |
+| `ASTROBOT_DEBUG`        | Enable debug logging                   | No (default: false)        | Both      |
 | `JSON_LOGS`             | Output logs in JSON format             | No (default: false)        | Both      |
 
 
