@@ -65,7 +65,6 @@ Create a `.env` file based on `.env.sample` with the following variables:
 | `OPENAI_API_KEY` | OpenAI API secret key | Found in OpenAI platform > "API Keys" |
 | `OPENAI_ASSISTANT_ID` | ID of your OpenAI Assistant | Found in Assistants Playground |
 | `SLACK_CHANNEL_ID` | Default channel for bot operations | Found in Slack channel URL or settings |
-| `HEALTH_CHECK_PORT` | Port for health check endpoint | `3000` (default if not specified) |
 
 
 ## Slack Setup
