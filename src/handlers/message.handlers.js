@@ -1,6 +1,7 @@
 // traffic controller for incoming messages
 
 const log = require('../utils/log');
+const config = require('../config');
 
 class MessageHandlers {
   constructor(textbookBot, visionBot, summaryBot, slackClient) {
@@ -8,15 +9,15 @@ class MessageHandlers {
     this.visionBot = visionBot;
     this.summaryBot = summaryBot;
     this.slackClient = slackClient;
-    this.channelId = process.env.SLACK_CHANNEL_ID;
-    
+    this.channelId = config.SLACK_CHANNEL_ID;
+
     log.info('message routing system online');
   }
 
   // main message dispatcher
   async handleMessage(event, client) {
     try {
-      log.slack('Incoming message received', { 
+      log.slack('Incoming message received', {
         channel: event.channel,
         user: event.user,
         hasFiles: !!(event.files && event.files.length > 0),
@@ -59,7 +60,7 @@ class MessageHandlers {
       log.debug('Message contained no processable content');
     } catch (error) {
       log.error('Error in message handler', error);
-      
+
       // tell user something broke
       try {
         await client.chat.postMessage({
@@ -76,8 +77,8 @@ class MessageHandlers {
   // handle image uploads
   async handleFilesMessage(event, client, slackThreadTs) {
     log.info('Processing message with attached files');
-    
-    const imageFiles = event.files.filter(file => 
+
+    const imageFiles = event.files.filter(file =>
       this.visionBot.isProcessableImage(file)
     );
 
@@ -116,9 +117,9 @@ class MessageHandlers {
       // now send questions to textbook bot
       for (const extraction of successfulExtractions) {
         log.info(`Processing extracted question from ${extraction.filename}`);
-        
+
         const response = await this.textbookBot.processQuestion(extraction.text, slackThreadTs);
-        
+
         await client.chat.postMessage({
           channel: event.channel,
           thread_ts: slackThreadTs,
@@ -152,7 +153,7 @@ class MessageHandlers {
 
       // send to textbook bot
       const response = await this.textbookBot.processQuestion(userMessage, slackThreadTs);
-      
+
       // replace thinking message with answer
       await client.chat.postMessage({
         channel: event.channel,

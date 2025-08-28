@@ -1,6 +1,7 @@
 // handles emoji reactions and user events
 
 const log = require('../utils/log');
+const config = require('../config');
 
 class EventHandlers {
   constructor(textbookBot, visionBot, summaryBot, slackClient) {
@@ -8,18 +9,18 @@ class EventHandlers {
     this.visionBot = visionBot;
     this.summaryBot = summaryBot;
     this.slackClient = slackClient;
-    this.channelId = process.env.SLACK_CHANNEL_ID;
-    
+    this.channelId = config.SLACK_CHANNEL_ID;
+
     log.info('emoji reactions and user events ready');
   }
 
   // someone reacted to a message
   async handleReactionAdded(event, client) {
     try {
-      log.slack('Reaction added', { 
-        emoji: event.reaction, 
+      log.slack('Reaction added', {
+        emoji: event.reaction,
         user: event.user,
-        channel: event.item.channel 
+        channel: event.item.channel
       });
 
       // ignore reactions from other channels
@@ -31,7 +32,7 @@ class EventHandlers {
       // pencil emoji = summary time
       if (event.reaction === 'pencil' || event.reaction === 'memo' || event.reaction === 'clipboard') {
         log.bot('summary', 'Summary trigger emoji detected');
-        
+
         // grab the original message
         const messageResult = await client.conversations.history({
           channel: event.item.channel,
@@ -49,7 +50,7 @@ class EventHandlers {
 
           if (hasSummaryKeyword) {
             log.info('Pencil emoji + summary keyword detected - generating summary');
-            
+
             await client.chat.postMessage({
               channel: event.item.channel,
               thread_ts: event.item.ts,
@@ -64,7 +65,7 @@ class EventHandlers {
 
       // check for other reaction types
       await this.handleOtherReactions(event, client);
-      
+
     } catch (error) {
       log.error('Error handling reaction', error);
     }
@@ -134,9 +135,9 @@ class EventHandlers {
   // file sharing events
   async handleFileShared(event, client) {
     try {
-      log.slack('File shared', { 
-        fileId: event.file_id, 
-        userId: event.user_id 
+      log.slack('File shared', {
+        fileId: event.file_id,
+        userId: event.user_id
       });
 
       // we handle files through message events instead
@@ -150,7 +151,7 @@ class EventHandlers {
   async handleTeamJoin(event, client) {
     try {
       log.slack('New team member', { user: event.user.id, name: event.user.name });
-      
+
       // could send welcome dm later
       log.info(`New team member joined: ${event.user.name || event.user.id}`);
     } catch (error) {

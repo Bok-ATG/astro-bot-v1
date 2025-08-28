@@ -1,6 +1,7 @@
 // handles slash commands and button clicks
 
 const log = require('../utils/log');
+const config = require('../config');
 
 class ActionHandlers {
   constructor(textbookBot, visionBot, summaryBot, slackClient) {
@@ -8,7 +9,7 @@ class ActionHandlers {
     this.visionBot = visionBot;
     this.summaryBot = summaryBot;
     this.slackClient = slackClient;
-    this.channelId = process.env.SLACK_CHANNEL_ID;
+    this.channelId = config.SLACK_CHANNEL_ID;
 
     log.info('slash commands and buttons ready to go');
   }

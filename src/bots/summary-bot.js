@@ -3,17 +3,18 @@
 const { OpenAI } = require('openai');
 const cron = require('node-cron');
 const log = require('../utils/log');
+const config = require('../config');
 
 class SummaryBot {
   constructor(slackClient) {
     this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: config.OPENAI_API_KEY,
     });
     this.slackClient = slackClient;
-    this.channelId = process.env.SLACK_CHANNEL_ID;
-    this.messageHistoryHours = parseInt(process.env.MESSAGE_HISTORY_HOURS || '24');
-    this.summarySchedule = process.env.SUMMARY_SCHEDULE || '0 18 * * 1-5'; // 6 PM Monday-Friday
-    
+    this.channelId = config.SLACK_CHANNEL_ID;
+    this.messageHistoryHours = config.MESSAGE_HISTORY_HOURS;
+    this.summarySchedule = config.SUMMARY_SCHEDULE;
+
     this.setupScheduledSummaries();
     log.bot('summary', 'ready to stalk your conversations (for science)');
   }
@@ -23,11 +24,11 @@ class SummaryBot {
     try {
       const now = new Date();
       const oldest = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
-      
+
       log.bot('summary', `Fetching ${hoursAgo} hours of conversation history`);
-      log.debug('Time range', { 
-        from: oldest.toISOString(), 
-        to: now.toISOString() 
+      log.debug('Time range', {
+        from: oldest.toISOString(),
+        to: now.toISOString()
       });
 
       // Initial fetch
@@ -116,9 +117,9 @@ class SummaryBot {
 
     try {
       log.openai('Generating conversation analysis and insights');
-      
+
       // prep the messages for ai analysis
-      const formattedMessages = messages.map(msg => 
+      const formattedMessages = messages.map(msg =>
         `[${msg.timestamp}] ${msg.userName}: ${msg.text}`
       ).join('\n\n');
 
@@ -126,21 +127,21 @@ class SummaryBot {
         FUNCTION
         Analyze educational Slack channel conversation data. Extract patterns in student questions and conceptual difficulties.
         Maintain academic precision. Avoid conversational language. Focus on technical analysis of learning patterns.
-        
+
         OUTPUT REQUIREMENTS
         1. Produce a concise summary (max 300 words) of key topics and discussions
         2. Identify specific patterns in student questions with precise categorization
         3. Analyze cognitive barriers and conceptual obstacles based on evidence in the conversation
         4. Formulate 3-5 targeted questions that address core conceptual challenges
         5. Document unresolved technical issues from the conversation
-        
+
         RESPONSE PROTOCOL
         - Eliminate subjective assessments
         - Focus on observable patterns in the data
         - Cite specific examples from the conversation when possible
         - Maintain technical precision in all analyses
         - Avoid speculative content where data is insufficient
-        
+
         Format response as JSON with the following structure:
         {
           "summary": "Technical summary of key topics and discussions",
@@ -266,12 +267,12 @@ class SummaryBot {
   async handleSummaryRequest(event) {
     const text = event.text?.toLowerCase() || '';
     const summaryTriggers = ['summary please', 'summarize channel', 'channel summary', 'generate summary'];
-    
+
     const isTriggered = summaryTriggers.some(trigger => text.includes(trigger));
-    
+
     if (isTriggered) {
       log.bot('summary', 'Manual summary request detected');
-      
+
       // let them know we're on it
       await this.slackClient.chat.postMessage({
         channel: event.channel,
@@ -283,7 +284,7 @@ class SummaryBot {
       await this.generateAndPostSummary();
       return true;
     }
-    
+
     return false;
   }
 }

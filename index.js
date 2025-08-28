@@ -1,10 +1,10 @@
 // main bot entry point - all the pieces come together here
 
-require('dotenv').config();
-const { App } = require('@slack/bolt');
+const { App, SocketModeReceiver, ExpressReceiver } = require('@slack/bolt');
 
 // grab all our fancy modules
 const log = require('./src/utils/log');
+const config = require('./src/config');
 const TextbookBot = require('./src/bots/textbook-bot');
 const VisionBot = require('./src/bots/vision-bot');
 const SummaryBot = require('./src/bots/summary-bot');
@@ -14,16 +14,82 @@ const ActionHandlers = require('./src/handlers/action.handlers');
 
 class AstroQABot {
   constructor() {
+    this.validateEnvironment();
+
+    const receiver = this.createReceiver();
+
     this.slackApp = new App({
-      token: process.env.SLACK_BOT_TOKEN,
-      signingSecret: process.env.SLACK_SIGNING_SECRET,
-      socketMode: true,
-      appToken: process.env.SLACK_APP_TOKEN,
+      token: config.SLACK_BOT_TOKEN,
+      clientId: config.SLACK_CLIENT_ID,
+      clientSecret: config.SLACK_CLIENT_SECRET,
+      receiver: receiver
     });
+
+    if (!config.IS_SOCKET_MODE) {
+      this.addHealthEndpoint(receiver);
+    }
 
     this.initializeBots();
     this.initializeHandlers();
     this.setupEventListeners();
+  }
+
+  validateEnvironment() {
+    const required = [...config.REQUIRED_ENV_VARS];
+
+    if (config.IS_SOCKET_MODE) {
+      required.push(...config.SOCKET_MODE_REQUIRED);
+    }
+
+    for (const env of required) {
+      if (!process.env[env]) {
+        throw new Error(`Missing required environment variable: ${env}`);
+      }
+    }
+
+    log.info(`Environment validated for ${config.IS_SOCKET_MODE ? 'socket' : 'HTTP'} mode`);
+  }
+
+  createReceiver() {
+    if (config.IS_SOCKET_MODE) {
+      log.info(`Creating SocketModeReceiver`);
+      return new SocketModeReceiver({
+        appToken: config.SLACK_APP_TOKEN,
+      });
+    } else {
+      log.info(`Creating ExpressReceiver with port: ${config.PORT}`);
+      return new ExpressReceiver({
+        signingSecret: config.SLACK_SIGNING_SECRET,
+        endpoints: '/slack/events',
+        port: config.PORT,
+        host: config.HOST,
+      });
+    }
+  }
+
+  addHealthEndpoint(receiver) {
+    receiver.router.get('/health', async (req, res) => {
+      try {
+        // Test Slack API connectivity using the bot token
+        const authTest = await this.slackApp.client.auth.test();
+
+        res.status(200).json({
+          status: 'healthy',
+          mode: 'http',
+          slack_connected: true,
+          bot_id: authTest.bot_id,
+          timestamp: new Date().toISOString()
+        });
+      } catch (error) {
+        res.status(500).json({
+          status: 'unhealthy',
+          mode: 'http',
+          slack_connected: false,
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+      }
+    });
   }
 
   // wake up the bots
@@ -121,8 +187,14 @@ class AstroQABot {
     try {
       log.separator();
       log.startup('Starting AstroBot...');
+      log.info(`Starting in ${config.IS_SOCKET_MODE ? 'socket' : 'HTTP'} mode`);
 
-      await this.slackApp.start();
+      if (config.IS_SOCKET_MODE) {
+        await this.slackApp.start();
+      } else {
+        await this.slackApp.start(config.PORT);
+        log.info(`HTTP server listening on port: ${config.PORT}`);
+      }
 
       log.success('AstroBot is now live and ready!');
       log.info('Bot capabilities:');
@@ -130,6 +202,7 @@ class AstroQABot {
       log.info('  Image question extraction');
       log.info('  Channel activity summaries');
       log.info('  Conversation thread management');
+
       log.separator();
 
       // housekeeping - clean up old threads every hour

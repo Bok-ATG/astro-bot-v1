@@ -1,5 +1,7 @@
 // logging that doesn't suck and keeps secrets safe
 
+const config = require('../config');
+
 const colors = {
   reset: '\x1b[0m',
   bright: '\x1b[1m',
@@ -20,11 +22,11 @@ class Logger {
 
   _formatTime() {
     const now = new Date();
-    return now.toLocaleTimeString('en-US', { 
-      hour12: false, 
-      hour: '2-digit', 
-      minute: '2-digit', 
-      second: '2-digit' 
+    return now.toLocaleTimeString('en-US', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
     });
   }
 
@@ -35,28 +37,28 @@ class Logger {
                  .replace(/xox[a-z]-[a-zA-Z0-9-]+/g, 'xox*-***HIDDEN***')
                  .replace(/asst_[a-zA-Z0-9]+/g, 'asst_***HIDDEN***');
     }
-    
+
     if (typeof data === 'object' && data !== null) {
       const sanitized = { ...data };
-      
+
       const sensitiveFields = ['token', 'apiKey', 'api_key', 'secret', 'password', 'authorization'];
-      
+
       for (const field of sensitiveFields) {
         if (sanitized[field]) {
           sanitized[field] = '***HIDDEN***'; // no peeking
         }
       }
-      
+
       return sanitized;
     }
-    
+
     return data;
   }
 
   info(message, data = null) {
     const timestamp = this._formatTime();
     console.log(`${colors.cyan}[${timestamp}]${colors.reset} ${colors.bright}INFO${colors.reset} ${message}`);
-    
+
     if (data) {
       const sanitized = this._sanitizeData(data);
       console.log(`${colors.dim}   └─ ${JSON.stringify(sanitized, null, 2)}${colors.reset}`);
@@ -66,7 +68,7 @@ class Logger {
   success(message, data = null) {
     const timestamp = this._formatTime();
     console.log(`${colors.green}[${timestamp}]${colors.reset} ${colors.bright}SUCCESS${colors.reset} ${message}`);
-    
+
     if (data) {
       const sanitized = this._sanitizeData(data);
       console.log(`${colors.dim}   └─ ${JSON.stringify(sanitized, null, 2)}${colors.reset}`);
@@ -76,7 +78,7 @@ class Logger {
   warning(message, data = null) {
     const timestamp = this._formatTime();
     console.log(`${colors.yellow}[${timestamp}]${colors.reset} ${colors.bright}WARNING${colors.reset} ${message}`);
-    
+
     if (data) {
       const sanitized = this._sanitizeData(data);
       console.log(`${colors.dim}   └─ ${JSON.stringify(sanitized, null, 2)}${colors.reset}`);
@@ -86,7 +88,7 @@ class Logger {
   error(message, error = null) {
     const timestamp = this._formatTime();
     console.log(`${colors.red}[${timestamp}]${colors.reset} ${colors.bright}ERROR${colors.reset} ${message}`);
-    
+
     if (error) {
       if (error instanceof Error) {
         console.log(`${colors.dim}   └─ ${error.message}${colors.reset}`);
@@ -101,10 +103,10 @@ class Logger {
   }
 
   debug(message, data = null) {
-    if (process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true') {
+    if (config.IS_DEVELOPMENT || config.DEBUG) {
       const timestamp = this._formatTime();
       console.log(`${colors.magenta}[${timestamp}]${colors.reset} ${colors.dim}DEBUG${colors.reset} ${message}`);
-      
+
       if (data) {
         const sanitized = this._sanitizeData(data);
         console.log(`${colors.dim}   └─ ${JSON.stringify(sanitized, null, 2)}${colors.reset}`);
@@ -115,7 +117,7 @@ class Logger {
   bot(botName, message, data = null) {
     const timestamp = this._formatTime();
     console.log(`${colors.blue}[${timestamp}]${colors.reset} ${colors.bright}${botName.toUpperCase()}${colors.reset} ${message}`);
-    
+
     if (data) {
       const sanitized = this._sanitizeData(data);
       console.log(`${colors.dim}   └─ ${JSON.stringify(sanitized, null, 2)}${colors.reset}`);
@@ -125,7 +127,7 @@ class Logger {
   slack(action, data = null) {
     const timestamp = this._formatTime();
     console.log(`${colors.cyan}[${timestamp}]${colors.reset} ${colors.bright}SLACK${colors.reset} ${action}`);
-    
+
     if (data) {
       const sanitized = this._sanitizeData(data);
       console.log(`${colors.dim}   └─ ${JSON.stringify(sanitized, null, 2)}${colors.reset}`);
@@ -135,7 +137,7 @@ class Logger {
   openai(action, data = null) {
     const timestamp = this._formatTime();
     console.log(`${colors.green}[${timestamp}]${colors.reset} ${colors.bright}OPENAI${colors.reset} ${action}`);
-    
+
     if (data) {
       const sanitized = this._sanitizeData(data);
       console.log(`${colors.dim}   └─ ${JSON.stringify(sanitized, null, 2)}${colors.reset}`);
