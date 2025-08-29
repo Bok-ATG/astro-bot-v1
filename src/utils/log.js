@@ -1,30 +1,27 @@
-// logging that doesn't suck and keeps secrets safe
+// logging utility with sensitive data protection
 
-const colors = {
-  reset: '\x1b[0m',
-  bright: '\x1b[1m',
-  dim: '\x1b[2m',
-  red: '\x1b[31m',
-  green: '\x1b[32m',
-  yellow: '\x1b[33m',
-  blue: '\x1b[34m',
-  magenta: '\x1b[35m',
-  cyan: '\x1b[36m',
-  white: '\x1b[37m'
-};
+const config = require('../config');
+const chalk = require('chalk');
 
 class Logger {
   constructor() {
     this.startTime = Date.now(); // when did we start this mess?
+    this.useJsonLogs = config.JSON_LOGS;
+
+    // Configure chalk based on environment
+    // Note: Chalk automatically detects TTY, but we can override for production
+    if (config.NODE_ENV === 'production' || !process.stdout.isTTY) {
+      chalk.level = 0; // Disable colors
+    }
   }
 
   _formatTime() {
     const now = new Date();
-    return now.toLocaleTimeString('en-US', { 
-      hour12: false, 
-      hour: '2-digit', 
-      minute: '2-digit', 
-      second: '2-digit' 
+    return now.toLocaleTimeString('en-US', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
     });
   }
 
@@ -35,120 +32,116 @@ class Logger {
                  .replace(/xox[a-z]-[a-zA-Z0-9-]+/g, 'xox*-***HIDDEN***')
                  .replace(/asst_[a-zA-Z0-9]+/g, 'asst_***HIDDEN***');
     }
-    
+
     if (typeof data === 'object' && data !== null) {
       const sanitized = { ...data };
-      
+
       const sensitiveFields = ['token', 'apiKey', 'api_key', 'secret', 'password', 'authorization'];
-      
+
       for (const field of sensitiveFields) {
         if (sanitized[field]) {
           sanitized[field] = '***HIDDEN***'; // no peeking
         }
       }
-      
+
       return sanitized;
     }
-    
+
     return data;
   }
 
-  info(message, data = null) {
+  _logStructured(level, message, data = null, error = null) {
+    const logEntry = {
+      timestamp: new Date().toISOString(),
+      level: level.toUpperCase(),
+      message,
+      ...(data && { data: this._sanitizeData(data) }),
+      ...(error && {
+        error: error instanceof Error
+          ? { message: error.message, stack: error.stack }
+          : this._sanitizeData(error)
+      })
+    };
+
+    console.log(JSON.stringify(logEntry));
+  }
+
+  _logWithData(level, levelColor, message, data = null) {
+    if (this.useJsonLogs) {
+      this._logStructured(level, message, data);
+      return;
+    }
+
     const timestamp = this._formatTime();
-    console.log(`${colors.cyan}[${timestamp}]${colors.reset} ${colors.bright}INFO${colors.reset} ${message}`);
-    
+    console.log(`${chalk.cyan(`[${timestamp}]`)} ${levelColor(level)} ${message}`);
+
     if (data) {
       const sanitized = this._sanitizeData(data);
-      console.log(`${colors.dim}   └─ ${JSON.stringify(sanitized, null, 2)}${colors.reset}`);
+      console.log(chalk.dim(`   └─ ${JSON.stringify(sanitized, null, 2)}`));
     }
+  }
+
+  info(message, data = null) {
+    this._logWithData('INFO', chalk.bold.cyan, message, data);
   }
 
   success(message, data = null) {
-    const timestamp = this._formatTime();
-    console.log(`${colors.green}[${timestamp}]${colors.reset} ${colors.bright}SUCCESS${colors.reset} ${message}`);
-    
-    if (data) {
-      const sanitized = this._sanitizeData(data);
-      console.log(`${colors.dim}   └─ ${JSON.stringify(sanitized, null, 2)}${colors.reset}`);
-    }
+    this._logWithData('SUCCESS', chalk.bold.green, message, data);
   }
 
   warning(message, data = null) {
-    const timestamp = this._formatTime();
-    console.log(`${colors.yellow}[${timestamp}]${colors.reset} ${colors.bright}WARNING${colors.reset} ${message}`);
-    
-    if (data) {
-      const sanitized = this._sanitizeData(data);
-      console.log(`${colors.dim}   └─ ${JSON.stringify(sanitized, null, 2)}${colors.reset}`);
-    }
+    this._logWithData('WARNING', chalk.bold.yellow, message, data);
   }
 
   error(message, error = null) {
+    if (this.useJsonLogs) {
+      this._logStructured('ERROR', message, null, error);
+      return;
+    }
+
     const timestamp = this._formatTime();
-    console.log(`${colors.red}[${timestamp}]${colors.reset} ${colors.bright}ERROR${colors.reset} ${message}`);
-    
+    console.log(`${chalk.cyan(`[${timestamp}]`)} ${chalk.bold.red('ERROR')} ${message}`);
+
     if (error) {
       if (error instanceof Error) {
-        console.log(`${colors.dim}   └─ ${error.message}${colors.reset}`);
+        console.log(chalk.dim(`   └─ ${error.message}`));
         if (error.stack) {
-          console.log(`${colors.dim}   └─ Stack: ${error.stack}${colors.reset}`);
+          console.log(chalk.dim(`   └─ Stack: ${error.stack}`));
         }
       } else {
         const sanitized = this._sanitizeData(error);
-        console.log(`${colors.dim}   └─ ${JSON.stringify(sanitized, null, 2)}${colors.reset}`);
+        console.log(chalk.dim(`   └─ ${JSON.stringify(sanitized, null, 2)}`));
       }
     }
   }
 
   debug(message, data = null) {
-    if (process.env.NODE_ENV === 'development' || process.env.DEBUG === 'true') {
-      const timestamp = this._formatTime();
-      console.log(`${colors.magenta}[${timestamp}]${colors.reset} ${colors.dim}DEBUG${colors.reset} ${message}`);
-      
-      if (data) {
-        const sanitized = this._sanitizeData(data);
-        console.log(`${colors.dim}   └─ ${JSON.stringify(sanitized, null, 2)}${colors.reset}`);
-      }
+    if (config.DEBUG) {
+      this._logWithData('DEBUG', chalk.dim.magenta, message, data);
     }
   }
 
   bot(botName, message, data = null) {
-    const timestamp = this._formatTime();
-    console.log(`${colors.blue}[${timestamp}]${colors.reset} ${colors.bright}${botName.toUpperCase()}${colors.reset} ${message}`);
-    
-    if (data) {
-      const sanitized = this._sanitizeData(data);
-      console.log(`${colors.dim}   └─ ${JSON.stringify(sanitized, null, 2)}${colors.reset}`);
-    }
+    this._logWithData(botName.toUpperCase(), chalk.bold.blue, message, data);
   }
 
   slack(action, data = null) {
-    const timestamp = this._formatTime();
-    console.log(`${colors.cyan}[${timestamp}]${colors.reset} ${colors.bright}SLACK${colors.reset} ${action}`);
-    
-    if (data) {
-      const sanitized = this._sanitizeData(data);
-      console.log(`${colors.dim}   └─ ${JSON.stringify(sanitized, null, 2)}${colors.reset}`);
-    }
+    this._logWithData('SLACK', chalk.bold.cyan, action, data);
   }
 
   openai(action, data = null) {
-    const timestamp = this._formatTime();
-    console.log(`${colors.green}[${timestamp}]${colors.reset} ${colors.bright}OPENAI${colors.reset} ${action}`);
-    
-    if (data) {
-      const sanitized = this._sanitizeData(data);
-      console.log(`${colors.dim}   └─ ${JSON.stringify(sanitized, null, 2)}${colors.reset}`);
-    }
+    this._logWithData('OPENAI', chalk.bold.green, action, data);
   }
 
   startup(message) {
-    const timestamp = this._formatTime();
-    console.log(`\n${colors.bright}${colors.green}[${timestamp}] ${message}${colors.reset}\n`);
+    this.info(message);
   }
 
   separator() {
-    console.log(`${colors.dim}${'─'.repeat(60)}${colors.reset}`);
+    if (this.useJsonLogs) {
+      return;
+    }
+    console.log(chalk.dim('─'.repeat(60)));
   }
 }
 

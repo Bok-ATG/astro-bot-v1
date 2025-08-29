@@ -3,13 +3,14 @@
 const { OpenAI } = require('openai');
 const axios = require('axios');
 const log = require('../utils/log');
+const config = require('../config');
 
 class VisionBot {
   constructor() {
     this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: config.OPENAI_API_KEY,
     });
-    
+
     log.bot('vision', 'ready to look at your pictures');
   }
 
@@ -17,17 +18,17 @@ class VisionBot {
   async downloadImage(imageUrl) {
     try {
       log.bot('vision', 'Downloading image from Slack');
-      
+
       const response = await axios.get(imageUrl, {
         responseType: 'arraybuffer',
-        headers: { 
-          Authorization: `Bearer ${process.env.SLACK_USER_TOKEN}` 
+        headers: {
+          Authorization: `Bearer ${config.SLACK_USER_TOKEN}`
         },
       });
-      
+
       const imageBuffer = Buffer.from(response.data, 'binary');
       log.success(`Image downloaded successfully (${imageBuffer.length} bytes)`);
-      
+
       return imageBuffer;
     } catch (error) {
       log.error('Failed to download image from Slack', error);
@@ -39,7 +40,7 @@ class VisionBot {
   async extractTextFromImage(imageBuffer, mimeType) {
     try {
       log.openai('Analyzing image with GPT-4 Vision');
-      
+
       const visionResponse = await this.openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
@@ -48,7 +49,7 @@ class VisionBot {
             content: [
               {
                 type: 'text',
-                text: `Analyze this image carefully. If it contains any questions, problems, or text that appears to be asking for help or explanation, extract that content exactly as written. 
+                text: `Analyze this image carefully. If it contains any questions, problems, or text that appears to be asking for help or explanation, extract that content exactly as written.
 
 If the image contains:
 - Questions or problems to solve
@@ -72,11 +73,11 @@ Return the extracted text. If the image contains no questions or requests for he
       });
 
       const extractedText = visionResponse.choices[0]?.message?.content?.trim();
-      
+
       if (extractedText && extractedText !== 'NO_QUESTION_FOUND') {
         log.success('Successfully extracted text from image');
-        log.debug('Extracted content preview', { 
-          preview: extractedText.substring(0, 150) + '...' 
+        log.debug('Extracted content preview', {
+          preview: extractedText.substring(0, 150) + '...'
         });
         return extractedText;
       } else {
@@ -93,7 +94,7 @@ Return the extracted text. If the image contains no questions or requests for he
   async processImageFile(file) {
     try {
       log.bot('vision', `Processing ${file.mimetype} image: ${file.name}`);
-      
+
       if (!file.mimetype || !file.mimetype.startsWith('image/')) {
         log.warning('not an image, moving on');
         return null;
@@ -101,10 +102,10 @@ Return the extracted text. If the image contains no questions or requests for he
 
       // Download the image
       const imageBuffer = await this.downloadImage(file.url_private);
-      
+
       // Extract text using vision
       const extractedText = await this.extractTextFromImage(imageBuffer, file.mimetype);
-      
+
       if (extractedText) {
         log.bot('vision', 'Image processing completed - text extracted successfully');
         return extractedText;
@@ -121,9 +122,9 @@ Return the extracted text. If the image contains no questions or requests for he
   // handle multiple images at once (because why not)
   async processMultipleImages(files) {
     const results = [];
-    
+
     log.bot('vision', `Processing ${files.length} uploaded files`);
-    
+
     for (const file of files) {
       try {
         const extractedText = await this.processImageFile(file);
@@ -144,20 +145,20 @@ Return the extracted text. If the image contains no questions or requests for he
         });
       }
     }
-    
+
     const successCount = results.filter(r => r.success).length;
     log.bot('vision', `Batch processing complete: ${successCount}/${files.length} files processed successfully`);
-    
+
     return results;
   }
 
   // check if we can actually read this image format
   isProcessableImage(file) {
     const supportedTypes = [
-      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif',
       'image/webp', 'image/bmp', 'image/tiff'
     ];
-    
+
     return file.mimetype && supportedTypes.includes(file.mimetype.toLowerCase());
   }
 }

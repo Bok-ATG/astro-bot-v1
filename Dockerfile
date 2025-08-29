@@ -14,4 +14,7 @@ RUN npm ci && \
 # Copy application code
 COPY --chown=node:node . .
 
+# Expose port for HTTP mode
+EXPOSE 3000
+
 CMD [ "npm", "start" ]

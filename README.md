@@ -4,7 +4,7 @@ A Slack bot that integrates with OpenAI's Assistants API to answer student quest
 
 ## Overview
 
-AstroBot is a Slack application that uses OpenAI's Assistants API to respond to messages and events. The bot has three main components:
+The bot has three main components:
 
 - **Textbook Bot**: Answers questions based on uploaded documents
 - **Vision Bot**: Analyzes and describes images shared in channels
@@ -13,8 +13,6 @@ AstroBot is a Slack application that uses OpenAI's Assistants API to respond to 
   - `/generate-summary` - Posts a summary of recent activity
   - `/bot-stats` - Shows stats about the bot’s activity
   - `/help` - Provides a help message listing
-
-The bot uses Slack's [socket mode](https://api.slack.com/apis/socket-mode) for event handling, which does not require exposing a public HTTP Request URL.
 
 ## Quickstart
 
@@ -40,7 +38,7 @@ The bot uses Slack's [socket mode](https://api.slack.com/apis/socket-mode) for e
 
 3. **Choose your deployment method:**
 
-   **Option A: Node.js**
+   **Option A: Local Development**
    ```bash
    npm install
    npm start
@@ -55,17 +53,49 @@ The bot uses Slack's [socket mode](https://api.slack.com/apis/socket-mode) for e
 
 Create a `.env` file based on `.env.sample` with the following variables:
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `SLACK_CLIENT_ID` | Slack app client ID | Found in "Basic Information" |
-| `SLACK_CLIENT_SECRET` | Slack app client secret | Found in "Basic Information" |
-| `SLACK_SIGNING_SECRET` | Used to verify requests from Slack | Found in "Basic Information" |
-| `SLACK_APP_TOKEN` | App-level token for Socket Mode | Found in "Basic Information" > "App-Level Tokens" |
-| `SLACK_BOT_TOKEN` | Bot user OAuth token | Found in "OAuth & Permissions" |
-| `OPENAI_API_KEY` | OpenAI API secret key | Found in OpenAI platform > "API Keys" |
-| `OPENAI_ASSISTANT_ID` | ID of your OpenAI Assistant | Found in Assistants Playground |
-| `SLACK_CHANNEL_ID` | Default channel for bot operations | Found in Slack channel URL or settings |
+### Core Environment Variables
 
+| Variable                | Description                            | Required |
+|-------------------------|----------------------------------------|----------|
+| `SLACK_CLIENT_ID`       | Slack app client ID                    | Yes      |
+| `SLACK_CLIENT_SECRET`   | Slack app client secret                | Yes      |
+| `SLACK_SIGNING_SECRET`  | Used to verify requests from Slack     | Yes      |
+| `SLACK_BOT_TOKEN`       | Bot user OAuth token                   | Yes      |
+| `SLACK_USER_TOKEN`      | User OAuth token for file access       | Yes      |
+| `OPENAI_API_KEY`        | OpenAI API secret key                  | Yes      |
+| `OPENAI_ASSISTANT_ID`   | ID of your OpenAI Assistant            | Yes      |
+| `SLACK_CHANNEL_ID`      | Default channel for bot operations     | Yes      |
+| `SLACK_MODE`            | Connection mode: `socket` or `http`    | No (default: socket) |
+| `MESSAGE_HISTORY_HOURS` | Hours of message history for summaries | No (default: 24) |
+| `SUMMARY_SCHEDULE`      | Cron schedule for automated summaries  | No (default: 6 PM Mon-Fri) |
+| `ASTROBOT_DEBUG`        | Enable debug logging                   | No (default: false) |
+| `JSON_LOGS`             | Output logs in JSON format             | No (default: false) |
+
+### Socket Mode Only
+
+| Variable          | Description                         | Required |
+|-------------------|-------------------------------------|----------|
+| `SLACK_APP_TOKEN` | App-level token for Socket Mode    | Yes      |
+
+### HTTP Mode Only
+
+| Variable | Description                    | Required |
+|----------|--------------------------------|----------|
+| `HOST`   | Host address for HTTP mode     | No (default: 0.0.0.0) |
+| `PORT`   | Port for HTTP mode             | No (default: 3000) |
+
+
+### Connection Modes
+
+**Socket Mode (Default)**
+- Use for local development
+- No public HTTP endpoint needed
+- Requires `SLACK_APP_TOKEN` with `connections:write` permission.
+
+**HTTP Mode**
+- Use for production/containerized deployments
+- Requires public HTTP endpoint for webhooks
+- Health check endpoint available at `/health`
 
 ## Slack Setup
 
@@ -84,21 +114,43 @@ Create a `.env` file based on `.env.sample` with the following variables:
 3. **Get Basic App Credentials**
    - Navigate to "Basic Information" in the sidebar
    - Under "App Credentials", copy the following:
-     - **Client ID**
-     - **Client Secret**
-     - **Signing Secret**
+     - **Client ID** (`SLACK_CLIENT_ID`)
+     - **Client Secret** (`SLACK_CLIENT_SECRET`)
+     - **Signing Secret** (`SLACK_SIGNING_SECRET`)
 
-4. **Generate App-Level Token**
+4. **Generate App-Level Token (Socket Mode Only)**
+   - **Note**: This step is only required if you plan to use Socket Mode for local development
    - Still in "Basic Information", scroll down to "App-Level Tokens"
    - Click "Generate Token and Scopes"
    - Add the `connections:write` scope
-   - Generate the token and copy it (starts with `xapp-`)
+   - Generate the token and copy it (starts with `xapp-`) - this is your `SLACK_APP_TOKEN`
 
-5. **Install to Workspace**
+5. **Install to Workspace and Get OAuth Tokens**
    - Navigate to "Install App" in the sidebar
    - Click "Install to Workspace"
    - Authorize the required permissions
-   - Copy the **Bot User OAuth Token** from "OAuth & Permissions" (starts with `xoxb-`)
+   - After installation, navigate to "OAuth & Permissions" in the sidebar
+   - Copy both tokens from this page:
+     - **Bot User OAuth Token** (starts with `xoxb-`) - this is your `SLACK_BOT_TOKEN`
+     - **User OAuth Token** (starts with `xoxp-`) - this is your `SLACK_USER_TOKEN`
+   - **Note**: The bot token is used for sending messages and basic bot operations, while the user token is required for file access operations. Both are needed for the app to function properly.
+
+### Additional Setup for HTTP Mode
+
+If you plan to use HTTP mode for production deployment:
+
+1. **Configure Event Subscriptions**
+   - Navigate to "Event Subscriptions" in the sidebar
+   - Enable Events and set your Request URL to: `https://your-domain.com/slack/events`
+   - Subscribe to the same bot events listed in the manifest
+
+2. **Configure Interactive Components**
+   - Navigate to "Interactivity & Shortcuts" in the sidebar
+   - Enable Interactivity and set Request URL to: `https://your-domain.com/slack/events`
+
+3. **Configure Slash Commands**
+   - Navigate to "Slash Commands" in the sidebar
+   - For each command, set Request URL to: `https://your-domain.com/slack/events`
 
 ### Bot Permissions
 

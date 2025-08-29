@@ -2,15 +2,16 @@
 
 const { OpenAI } = require('openai');
 const log = require('../utils/log');
+const config = require('../config');
 
 class TextbookBot {
   constructor() {
     this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+      apiKey: config.OPENAI_API_KEY,
     });
-    this.assistantId = process.env.OPENAI_ASSISTANT_ID;
+    this.assistantId = config.OPENAI_ASSISTANT_ID;
     this.threadMap = new Map(); // Slack thread_ts <-> OpenAI thread_id
-    
+
     log.bot('textbook', 'ready to answer all your burning questions');
   }
 
@@ -26,12 +27,12 @@ class TextbookBot {
       log.openai('Creating new conversation thread');
       const thread = await this.openai.beta.threads.create();
       this.threadMap.set(slackThreadTs, thread.id);
-      
-      log.success(`New conversation thread established`, { 
-        slackThread: slackThreadTs, 
-        openaiThread: thread.id 
+
+      log.success(`New conversation thread established`, {
+        slackThread: slackThreadTs,
+        openaiThread: thread.id
       });
-      
+
       return thread.id;
     } catch (error) {
       log.error('Failed to create or retrieve conversation thread', error);
@@ -82,15 +83,15 @@ class TextbookBot {
 
       if (runStatus.status === 'completed') {
         log.success('Assistant analysis completed');
-        
-        const messages = await this.openai.beta.threads.messages.list(openaiThreadId, { 
-          limit: 1, 
-          order: 'desc' 
+
+        const messages = await this.openai.beta.threads.messages.list(openaiThreadId, {
+          limit: 1,
+          order: 'desc'
         });
-        
-        const assistantReply = messages.data[0]?.content[0]?.text?.value || 
+
+        const assistantReply = messages.data[0]?.content[0]?.text?.value ||
                               "sorry, my brain broke trying to answer that";
-        
+
         log.bot('textbook', 'Generated response ready for delivery');
         return assistantReply;
       } else {
@@ -115,7 +116,7 @@ class TextbookBot {
   cleanupOldThreads(maxAge = 24 * 60 * 60 * 1000) { // dump anything older than a day
     const now = Date.now();
     let cleaned = 0;
-    
+
     for (const [slackThreadTs, openaiThreadId] of this.threadMap.entries()) {
       const threadAge = now - (parseFloat(slackThreadTs) * 1000);
       if (threadAge > maxAge) {
@@ -123,11 +124,11 @@ class TextbookBot {
         cleaned++;
       }
     }
-    
+
     if (cleaned > 0) {
       log.info(`cleaned up ${cleaned} old threads (marie kondo would be proud)`);
     }
-    
+
     return cleaned;
   }
 }
