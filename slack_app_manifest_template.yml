@@ -43,6 +43,7 @@ settings:
       - app_mention
       - file_shared
       - member_joined_channel
+      - message.channels
       - reaction_added
       - team_join
   interactivity:
