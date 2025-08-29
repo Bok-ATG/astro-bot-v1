@@ -198,7 +198,7 @@ class AstroQABot {
 
       log.success('AstroBot is now live and ready!');
       log.info('Bot capabilities:');
-      log.info('  Text Q&A via OpenAI Assistant');
+      log.info(`  Text Q&A via OpenAI Assistant: ${config.OPENAI_ASSISTANT_ID}`);
       log.info('  Image question extraction');
       log.info('  Channel activity summaries');
       log.info('  Conversation thread management');
