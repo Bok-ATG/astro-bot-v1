@@ -14,10 +14,6 @@ AstroBot is a Slack application that uses OpenAI's Assistants API to respond to 
   - `/bot-stats` - Shows stats about the bot’s activity
   - `/help` - Provides a help message listing
 
-The bot supports two connection modes:
-- **Socket Mode**: For local development (default)
-- **HTTP Mode**: For containerized/production deployments
-
 ## Quickstart
 
 ### Prerequisites
@@ -42,17 +38,14 @@ The bot supports two connection modes:
 
 3. **Choose your deployment method:**
 
-   **Option A: Local Development (Socket Mode)**
+   **Option A: Local Development**
    ```bash
    npm install
    npm start
    ```
 
-   **Option B: Docker (HTTP Mode)**
+   **Option B: Docker**
    ```bash
-   # Use HTTP mode configuration
-   cp .env.http.sample .env
-   # Edit .env with your values, then:
    docker compose up
    ```
 
@@ -60,24 +53,36 @@ The bot supports two connection modes:
 
 Create a `.env` file based on `.env.sample` with the following variables:
 
-| Variable                | Description                            | Required                   | Mode      |
-|-------------------------|----------------------------------------|----------------------------|-----------|
-| `SLACK_CLIENT_ID`       | Slack app client ID                    | Yes                        | Both      |
-| `SLACK_CLIENT_SECRET`   | Slack app client secret                | Yes                        | Both      |
-| `SLACK_SIGNING_SECRET`  | Used to verify requests from Slack     | Yes                        | Both      |
-| `SLACK_BOT_TOKEN`       | Bot user OAuth token                   | Yes                        | Both      |
-| `SLACK_APP_TOKEN`       | App-level token for Socket Mode        | Socket only                | Socket    |
-| `SLACK_USER_TOKEN`      | User OAuth token for file access       | Yes                        | Both      |
-| `OPENAI_API_KEY`        | OpenAI API secret key                  | Yes                        | Both      |
-| `OPENAI_ASSISTANT_ID`   | ID of your OpenAI Assistant            | Yes                        | Both      |
-| `SLACK_CHANNEL_ID`      | Default channel for bot operations     | Yes                        | Both      |
-| `SLACK_MODE`            | Connection mode: `socket` or `http`    | No (default: socket)       | Both      |
-| `HOST`                  | Host address for HTTP mode             | No (default: 0.0.0.0)      | HTTP only |
-| `PORT`                  | Port for HTTP mode                     | No (default: 3000)         | HTTP only |
-| `MESSAGE_HISTORY_HOURS` | Hours of message history for summaries | No (default: 24)           | Both      |
-| `SUMMARY_SCHEDULE`      | Cron schedule for automated summaries  | No (default: 6 PM Mon-Fri) | Both      |
-| `ASTROBOT_DEBUG`        | Enable debug logging                   | No (default: false)        | Both      |
-| `JSON_LOGS`             | Output logs in JSON format             | No (default: false)        | Both      |
+### Core Environment Variables
+
+| Variable                | Description                            | Required |
+|-------------------------|----------------------------------------|----------|
+| `SLACK_CLIENT_ID`       | Slack app client ID                    | Yes      |
+| `SLACK_CLIENT_SECRET`   | Slack app client secret                | Yes      |
+| `SLACK_SIGNING_SECRET`  | Used to verify requests from Slack     | Yes      |
+| `SLACK_BOT_TOKEN`       | Bot user OAuth token                   | Yes      |
+| `SLACK_USER_TOKEN`      | User OAuth token for file access       | Yes      |
+| `OPENAI_API_KEY`        | OpenAI API secret key                  | Yes      |
+| `OPENAI_ASSISTANT_ID`   | ID of your OpenAI Assistant            | Yes      |
+| `SLACK_CHANNEL_ID`      | Default channel for bot operations     | Yes      |
+| `SLACK_MODE`            | Connection mode: `socket` or `http`    | No (default: socket) |
+| `MESSAGE_HISTORY_HOURS` | Hours of message history for summaries | No (default: 24) |
+| `SUMMARY_SCHEDULE`      | Cron schedule for automated summaries  | No (default: 6 PM Mon-Fri) |
+| `ASTROBOT_DEBUG`        | Enable debug logging                   | No (default: false) |
+| `JSON_LOGS`             | Output logs in JSON format             | No (default: false) |
+
+### Socket Mode Only
+
+| Variable          | Description                         | Required |
+|-------------------|-------------------------------------|----------|
+| `SLACK_APP_TOKEN` | App-level token for Socket Mode    | Yes      |
+
+### HTTP Mode Only
+
+| Variable | Description                    | Required |
+|----------|--------------------------------|----------|
+| `HOST`   | Host address for HTTP mode     | No (default: 0.0.0.0) |
+| `PORT`   | Port for HTTP mode             | No (default: 3000) |
 
 
 ### Connection Modes
@@ -85,13 +90,12 @@ Create a `.env` file based on `.env.sample` with the following variables:
 **Socket Mode (Default)**
 - Use for local development
 - No public HTTP endpoint needed
-- Requires `SLACK_APP_TOKEN`
+- Requires `SLACK_APP_TOKEN` with `connections:write` permission.
 
 **HTTP Mode**
 - Use for production/containerized deployments
 - Requires public HTTP endpoint for webhooks
 - Health check endpoint available at `/health`
-- More suitable for load balancing and scaling
 
 ## Slack Setup
 
