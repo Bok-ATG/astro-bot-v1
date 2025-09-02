@@ -108,8 +108,20 @@ Create a `.env` file based on `.env.sample` with the following variables:
 2. **Use App Manifest**
    - Select "From an app manifest"
    - Choose your workspace
-   - Copy the contents of `slack_app_manifest.yml` from this repository
+   - Copy the contents of `slack/manifest_template.yml` from this repository
    - Paste the manifest and review the configuration
+   - **Note:** If you are using HTTP mode, use the script `slack/generate_manifest.py` to generate a manifest with the correct URLs. See `slack/README.md` for instructions.
+
+3. **Set App Icon**
+   - Go to "App Icon & Preview" in the Slack app configuration page
+   - Upload the icon image from `assets/icon.jpg` in this repository
+
+4. **Get Basic App Credentials**
+   - Navigate to "Basic Information" in the sidebar
+   - Under "App Credentials", copy the following:
+     - **Client ID** (`SLACK_CLIENT_ID`)
+     - **Client Secret** (`SLACK_CLIENT_SECRET`)
+     - **Signing Secret** (`SLACK_SIGNING_SECRET`)
 
 3. **Get Basic App Credentials**
    - Navigate to "Basic Information" in the sidebar
@@ -186,6 +198,7 @@ The bot requires the following OAuth scopes (configured in the manifest):
    - Click "Create Assistant"
    - Configure your assistant with:
      - **Model**: `gpt-4.1`
+     - **Temperature**: `0`
      - **Instructions**: Defines the assistant's role and behavior
      - **Tools**: Enable File Search
      - **Files**: Upload documents
