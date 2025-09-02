@@ -1,3 +1,5 @@
+.DS_Store
+
 # Logs
 logs
 *.log
@@ -134,7 +136,10 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
+# Python
+.venv
+.python-version
+
 # Generated Slack app manifests (keep template)
-*manifest*.yml
-!slack_app_manifest.yml
-!slack_app_manifest_template.yml
+**/*manifest*.yml
+!slack/manifest_template.yml
