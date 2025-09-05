@@ -123,21 +123,14 @@ Create a `.env` file based on `.env.sample` with the following variables:
      - **Client Secret** (`SLACK_CLIENT_SECRET`)
      - **Signing Secret** (`SLACK_SIGNING_SECRET`)
 
-3. **Get Basic App Credentials**
-   - Navigate to "Basic Information" in the sidebar
-   - Under "App Credentials", copy the following:
-     - **Client ID** (`SLACK_CLIENT_ID`)
-     - **Client Secret** (`SLACK_CLIENT_SECRET`)
-     - **Signing Secret** (`SLACK_SIGNING_SECRET`)
-
-4. **Generate App-Level Token (Socket Mode Only)**
+5. **Generate App-Level Token (Socket Mode Only)**
    - **Note**: This step is only required if you plan to use Socket Mode for local development
    - Still in "Basic Information", scroll down to "App-Level Tokens"
    - Click "Generate Token and Scopes"
    - Add the `connections:write` scope
    - Generate the token and copy it (starts with `xapp-`) - this is your `SLACK_APP_TOKEN`
 
-5. **Install to Workspace and Get OAuth Tokens**
+6. **Install to Workspace and Get OAuth Tokens**
    - Navigate to "Install App" in the sidebar
    - Click "Install to Workspace"
    - Authorize the required permissions
