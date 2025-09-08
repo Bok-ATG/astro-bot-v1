@@ -8,3 +8,5 @@
 - It does assume that you have your env configured, so match the environment being tested
 - Should run on port 229, should attach to debugger and stop at the first breakpoint
 - Variables can be inspected in the VS Code debugger when breakpoints are set
+- The root cause was identified as the bot outputting unrelated content when the only message it was summarizing was a single "summary please" request.
+    - This was found by inspecting the data being passed around as the request was handled, using the above method for debugging.
