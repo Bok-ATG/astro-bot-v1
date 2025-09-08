@@ -27,8 +27,6 @@ class Logger {
   constructor() {
     this.startTime = Date.now(); // when did we start this mess?
     this.useJsonLogs = config.JSON_LOGS;
-
-  // Color output is controlled by colorEnabled flag in color utility
   }
 
   _formatTime() {
@@ -45,8 +43,8 @@ class Logger {
     if (typeof data === 'string') {
       // hide the secret sauce
       return data.replace(/sk-[a-zA-Z0-9]{48}/g, 'sk-***HIDDEN***')
-                 .replace(/xox[a-z]-[a-zA-Z0-9-]+/g, 'xox*-***HIDDEN***')
-                 .replace(/asst_[a-zA-Z0-9]+/g, 'asst_***HIDDEN***');
+        .replace(/xox[a-z]-[a-zA-Z0-9-]+/g, 'xox*-***HIDDEN***')
+        .replace(/asst_[a-zA-Z0-9]+/g, 'asst_***HIDDEN***');
     }
 
     if (typeof data === 'object' && data !== null) {
@@ -139,11 +137,11 @@ class Logger {
   }
 
   bot(botName, message, data = null) {
-  this._logWithData(botName.toUpperCase(), color.boldBlue, message, data);
+    this._logWithData(botName.toUpperCase(), color.boldBlue, message, data);
   }
 
   slack(action, data = null) {
-  this._logWithData('SLACK', color.boldCyan, action, data);
+    this._logWithData('SLACK', color.boldCyan, action, data);
   }
 
   openai(action, data = null) {
