@@ -4,23 +4,35 @@ const config = require('../config');
 
 // Minimal terminal color utility
 const colorEnabled = process.stdout.isTTY && config.NODE_ENV !== 'production';
+
+// ANSI escape codes as constants
+const ANSI_RESET = "\x1b[0m";
+const ANSI_BOLD = "\x1b[1m";
+const ANSI_DIM = "\x1b[2m";
+const ANSI_CYAN = "\x1b[36m";
+const ANSI_GREEN = "\x1b[32m";
+const ANSI_YELLOW = "\x1b[33m";
+const ANSI_RED = "\x1b[31m";
+const ANSI_MAGENTA = "\x1b[35m";
+const ANSI_BLUE = "\x1b[34m";
+
 const color = {
-  reset: "\x1b[0m",
-  bold: "\x1b[1m",
-  dim: "\x1b[2m",
-  cyan: (str) => colorEnabled ? `\x1b[36m${str}${color.reset}` : str,
-  green: (str) => colorEnabled ? `\x1b[32m${str}${color.reset}` : str,
-  yellow: (str) => colorEnabled ? `\x1b[33m${str}${color.reset}` : str,
-  red: (str) => colorEnabled ? `\x1b[31m${str}${color.reset}` : str,
-  magenta: (str) => colorEnabled ? `\x1b[35m${str}${color.reset}` : str,
-  blue: (str) => colorEnabled ? `\x1b[34m${str}${color.reset}` : str,
-  boldCyan: (str) => colorEnabled ? `${color.bold}\x1b[36m${str}${color.reset}` : str,
-  boldGreen: (str) => colorEnabled ? `${color.bold}\x1b[32m${str}${color.reset}` : str,
-  boldYellow: (str) => colorEnabled ? `${color.bold}\x1b[33m${str}${color.reset}` : str,
-  boldRed: (str) => colorEnabled ? `${color.bold}\x1b[31m${str}${color.reset}` : str,
-  boldBlue: (str) => colorEnabled ? `${color.bold}\x1b[34m${str}${color.reset}` : str,
-  dimText: (str) => colorEnabled ? `${color.dim}${str}${color.reset}` : str,
-  dimMagenta: (str) => colorEnabled ? `${color.dim}\x1b[35m${str}${color.reset}` : str,
+  reset: ANSI_RESET,
+  bold: ANSI_BOLD,
+  dim: ANSI_DIM,
+  cyan: (str) => colorEnabled ? `${ANSI_CYAN}${str}${ANSI_RESET}` : str,
+  green: (str) => colorEnabled ? `${ANSI_GREEN}${str}${ANSI_RESET}` : str,
+  yellow: (str) => colorEnabled ? `${ANSI_YELLOW}${str}${ANSI_RESET}` : str,
+  red: (str) => colorEnabled ? `${ANSI_RED}${str}${ANSI_RESET}` : str,
+  magenta: (str) => colorEnabled ? `${ANSI_MAGENTA}${str}${ANSI_RESET}` : str,
+  blue: (str) => colorEnabled ? `${ANSI_BLUE}${str}${ANSI_RESET}` : str,
+  boldCyan: (str) => colorEnabled ? `${ANSI_BOLD}${ANSI_CYAN}${str}${ANSI_RESET}` : str,
+  boldGreen: (str) => colorEnabled ? `${ANSI_BOLD}${ANSI_GREEN}${str}${ANSI_RESET}` : str,
+  boldYellow: (str) => colorEnabled ? `${ANSI_BOLD}${ANSI_YELLOW}${str}${ANSI_RESET}` : str,
+  boldRed: (str) => colorEnabled ? `${ANSI_BOLD}${ANSI_RED}${str}${ANSI_RESET}` : str,
+  boldBlue: (str) => colorEnabled ? `${ANSI_BOLD}${ANSI_BLUE}${str}${ANSI_RESET}` : str,
+  dimText: (str) => colorEnabled ? `${ANSI_DIM}${str}${ANSI_RESET}` : str,
+  dimMagenta: (str) => colorEnabled ? `${ANSI_DIM}${ANSI_MAGENTA}${str}${ANSI_RESET}` : str,
 };
 
 class Logger {
