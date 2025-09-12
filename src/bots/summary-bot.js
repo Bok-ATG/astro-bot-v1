@@ -21,14 +21,19 @@ class SummaryBot {
     this.minMessages = config.SUMMARY_MIN_MESSAGES ?? 6;
     this.minUniqueUsers = config.SUMMARY_MIN_UNIQUE_USERS ?? 2;
     this.gapMinutes = config.SUMMARY_GAP_MINUTES ?? 90;
+    this.enableCheckpointing = config.ENABLE_CHECKPOINTING;
 
-    this.checkpoints = new Checkpoints(config.CHECKPOINT_PATH);
-    if (this.checkpoints.get('weekly') === undefined) this.checkpoints.set('weekly', null);
-    if (this.checkpoints.get('manual') === undefined) this.checkpoints.set('manual', null);
+    // Only initialize checkpoints if enabled
+    if (this.enableCheckpointing) {
+      this.checkpoints = new Checkpoints(config.CHECKPOINT_PATH);
+      if (this.checkpoints.get('weekly') === undefined) this.checkpoints.set('weekly', null);
+      if (this.checkpoints.get('manual') === undefined) this.checkpoints.set('manual', null);
+    }
   
     this.setupScheduledWeeklySummary();  
 
-    log.bot('summary', 'ready to stalk your conversations (for science) — since-last-summary mode enabled');
+    const mode = this.enableCheckpointing ? 'since-last-summary mode enabled' : 'time-window mode (checkpointing disabled)';
+    log.bot('summary', `ready to stalk your conversations (for science) — ${mode}`);
   }
   computeStats(messages) {
     const uniqueUsers = new Set(messages.map(m => m.user).filter(Boolean));
@@ -98,6 +103,13 @@ class SummaryBot {
 
       const userMessages = messages
         .filter(msg => !msg.bot_id && !msg.subtype)
+        .filter(msg => {
+          // Filter out trigger messages to avoid including them in summaries
+          const text = (msg.text || '').toLowerCase();
+          const summaryTriggers = ['summary please', 'summarize channel', 'channel summary', 'generate summary'];
+          const isTrigger = summaryTriggers.some(trigger => text.includes(trigger)) || /<@[\w]+>/.test(text);
+          return !isTrigger;
+        })
         .sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
 
       log.success(`Retrieved ${userMessages.length} user messages for analysis`);
@@ -354,28 +366,47 @@ ${formattedMessages}
   }
 
   async runWeeklySummary() {
-    const lastWeeklyIso = this.checkpoints.get('weekly');
-    const oldestTsSec = lastWeeklyIso ? Math.floor(new Date(lastWeeklyIso).getTime() / 1000) : undefined;
+    let oldestTsSec;
+    
+    if (this.enableCheckpointing) {
+      const lastWeeklyIso = this.checkpoints.get('weekly');
+      oldestTsSec = lastWeeklyIso ? Math.floor(new Date(lastWeeklyIso).getTime() / 1000) : undefined;
+    } else {
+      // Fallback to 7-day window when checkpointing is disabled
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      oldestTsSec = Math.floor(sevenDaysAgo.getTime() / 1000);
+    }
 
     await this.generateAndPostSummary({
       oldestTsSec,
       header: '*Weekly Channel Summary*'
     });
 
-    this.checkpoints.set('weekly', new Date().toISOString());
+    if (this.enableCheckpointing) {
+      this.checkpoints.set('weekly', new Date().toISOString());
+    }
   }
 
   async runManualSummary(triggerChannel, replyToTs) {
-    const weeklyIso = this.checkpoints.get('weekly');
-    const manualIso = this.checkpoints.get('manual');
-
-    const startIso = [weeklyIso, manualIso].filter(Boolean).sort().at(-1) || null;
-    const oldestTsSec = startIso ? Math.floor(new Date(startIso).getTime() / 1000) : undefined;
+    let oldestTsSec;
+    let statusMessage;
+    
+    if (this.enableCheckpointing) {
+      const weeklyIso = this.checkpoints.get('weekly');
+      const manualIso = this.checkpoints.get('manual');
+      const startIso = [weeklyIso, manualIso].filter(Boolean).sort().at(-1) || null;
+      oldestTsSec = startIso ? Math.floor(new Date(startIso).getTime() / 1000) : undefined;
+      statusMessage = "🔄 Summarizing messages since the last summary checkpoint...";
+    } else {
+      // Fallback to default time window when checkpointing is disabled
+      oldestTsSec = undefined; // Will use MESSAGE_HISTORY_HOURS
+      statusMessage = `🔄 Summarizing the last ${this.messageHistoryHours} hours of messages...`;
+    }
 
     await this.slackClient.chat.postMessage({
       channel: triggerChannel,
       thread_ts: replyToTs,
-      text: "🔄 Summarizing messages since the last summary checkpoint..."
+      text: statusMessage
     });
 
     await this.generateAndPostSummary({
@@ -383,7 +414,9 @@ ${formattedMessages}
       header: '*On-Demand Channel Summary*'
     });
 
-    this.checkpoints.set('manual', new Date().toISOString());
+    if (this.enableCheckpointing) {
+      this.checkpoints.set('manual', new Date().toISOString());
+    }
   }
 
   setupScheduledSummaries() {

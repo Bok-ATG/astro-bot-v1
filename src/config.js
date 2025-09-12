@@ -28,6 +28,7 @@ const SUMMARY_MIN_MESSAGES = parseInt(process.env.SUMMARY_MIN_MESSAGES || '3');
 const SUMMARY_MIN_UNIQUE_USERS = parseInt(process.env.SUMMARY_MIN_UNIQUE_USERS || '2');
 const SUMMARY_GAP_MINUTES = parseInt(process.env.SUMMARY_GAP_MINUTES || '90');
 const CHECKPOINT_PATH = process.env.CHECKPOINT_PATH || './data/summary_checkpoints.json';
+const ENABLE_CHECKPOINTING = process.env.ENABLE_CHECKPOINTING !== 'false'; // default true, set to 'false' to disable
 
 
 // Development/Debug Configuration
@@ -81,6 +82,7 @@ module.exports = {
   SUMMARY_MIN_UNIQUE_USERS,
   SUMMARY_GAP_MINUTES,
   CHECKPOINT_PATH,
+  ENABLE_CHECKPOINTING,
 
   // Development
   NODE_ENV,
