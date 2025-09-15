@@ -4,6 +4,7 @@ const { OpenAI } = require('openai');
 const cron = require('node-cron');
 const log = require('../utils/log');
 const config = require('../config');
+const Checkpoints = require('../utils/checkpoint'); 
 
 class SummaryBot {
   constructor(slackClient) {
@@ -12,51 +13,103 @@ class SummaryBot {
     });
     this.slackClient = slackClient;
     this.channelId = config.SLACK_CHANNEL_ID;
+
     this.messageHistoryHours = config.MESSAGE_HISTORY_HOURS;
     this.summarySchedule = config.SUMMARY_SCHEDULE;
 
-    this.setupScheduledSummaries();
-    log.bot('summary', 'ready to stalk your conversations (for science)');
+    this.weeklySchedule = config.SUMMARY_SCHEDULE_WEEKLY; 
+    this.minMessages = config.SUMMARY_MIN_MESSAGES ?? 6;
+    this.minUniqueUsers = config.SUMMARY_MIN_UNIQUE_USERS ?? 2;
+    this.gapMinutes = config.SUMMARY_GAP_MINUTES ?? 90;
+    this.enableCheckpointing = config.ENABLE_CHECKPOINTING;
+
+    // Only initialize checkpoints if enabled
+    if (this.enableCheckpointing) {
+      this.checkpoints = new Checkpoints(config.CHECKPOINT_PATH);
+      if (this.checkpoints.get('weekly') === undefined) this.checkpoints.set('weekly', null);
+      if (this.checkpoints.get('manual') === undefined) this.checkpoints.set('manual', null);
+    }
+  
+    this.setupScheduledWeeklySummary();  
+
+    const mode = this.enableCheckpointing ? 'since-last-summary mode enabled' : 'time-window mode (checkpointing disabled)';
+    log.bot('summary', `ready to stalk your conversations (for science) — ${mode}`);
+  }
+  computeStats(messages) {
+    const uniqueUsers = new Set(messages.map(m => m.user).filter(Boolean));
+    const firstTs = messages[0]?.ts ? new Date(parseFloat(messages[0].ts) * 1000).toISOString() : null;
+    const lastTs  = messages.at(-1)?.ts ? new Date(parseFloat(messages.at(-1).ts) * 1000).toISOString() : null;
+    return { messageCount: messages.length, uniqueUserCount: uniqueUsers.size, firstTs, lastTs };
   }
 
-  // dig through chat history
-  async fetchChannelHistory(hoursAgo = this.messageHistoryHours) {
+  segmentByGap(messages, gapMinutes = this.gapMinutes) {
+    const groups = [];
+    let current = [];
+    const gapMs = gapMinutes * 60 * 1000;
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      const ts = new Date(parseFloat(msg.ts) * 1000);
+      const prev = i > 0 ? new Date(parseFloat(messages[i - 1].ts) * 1000) : null;
+      const dayChanged = i > 0 && ts.toDateString() !== prev.toDateString();
+      const bigGap = prev && (ts - prev) > gapMs;
+
+      if (current.length && (bigGap || dayChanged)) {
+        groups.push(current);
+        current = [];
+      }
+      current.push(msg);
+    }
+    if (current.length) groups.push(current);
+    return groups;
+  }
+
+  async fetchChannelHistory(hoursAgo = this.messageHistoryHours, oldestTsSec = undefined) {
     try {
       const now = new Date();
-      const oldest = new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
+      const usingOldest = oldestTsSec !== undefined;
 
-      log.bot('summary', `Fetching ${hoursAgo} hours of conversation history`);
-      log.debug('Time range', {
-        from: oldest.toISOString(),
-        to: now.toISOString()
-      });
+      const oldest = usingOldest
+        ? new Date(oldestTsSec * 1000)
+        : new Date(now.getTime() - hoursAgo * 60 * 60 * 1000);
+
+      log.bot('summary', usingOldest
+        ? `Fetching conversation history since checkpoint: ${oldest.toISOString()}`
+        : `Fetching ${hoursAgo} hours of conversation history`);
+
+      log.debug('Time range', { from: oldest.toISOString(), to: now.toISOString() });
 
       // Initial fetch
       const result = await this.slackClient.conversations.history({
         channel: this.channelId,
         oldest: (oldest.getTime() / 1000).toString(),
-        limit: 100,
+        limit: 200, // bumped to 200
       });
 
       let messages = result.messages || [];
       let cursor = result.response_metadata?.next_cursor;
 
-      // keep grabbing more messages if there are any
       while (cursor) {
         log.debug('Fetching additional message page');
         const nextPage = await this.slackClient.conversations.history({
           channel: this.channelId,
           cursor,
-          limit: 100,
+          limit: 200,
         });
 
         messages = messages.concat(nextPage.messages || []);
         cursor = nextPage.response_metadata?.next_cursor;
       }
 
-      // clean up and sort the messages
       const userMessages = messages
         .filter(msg => !msg.bot_id && !msg.subtype)
+        .filter(msg => {
+          // Filter out trigger messages to avoid including them in summaries
+          const text = (msg.text || '').toLowerCase();
+          const summaryTriggers = ['summary please', 'summarize channel', 'channel summary', 'generate summary'];
+          const isTrigger = summaryTriggers.some(trigger => text.includes(trigger)) || /<@[\w]+>/.test(text);
+          return !isTrigger;
+        })
         .sort((a, b) => parseFloat(a.ts) - parseFloat(b.ts));
 
       log.success(`Retrieved ${userMessages.length} user messages for analysis`);
@@ -67,16 +120,20 @@ class SummaryBot {
     }
   }
 
-  // turn user ids into actual names (much more friendly)
   async enrichMessagesWithUserInfo(messages) {
     try {
       const userCache = new Map();
       log.bot('summary', 'Enriching messages with user information');
 
       const enrichedMessages = await Promise.all(messages.map(async (msg) => {
-        if (!msg.user) return msg;
+        if (!msg.user) {
+          return {
+            ...msg,
+            userName: 'unknown',
+            timestamp: new Date(parseFloat(msg.ts) * 1000).toISOString(),
+          };
+        }
 
-        // see if we already know this user
         if (!userCache.has(msg.user)) {
           try {
             const userInfo = await this.slackClient.users.info({ user: msg.user });
@@ -84,7 +141,7 @@ class SummaryBot {
             userCache.set(msg.user, userName);
           } catch (error) {
             log.warning(`Could not fetch info for user ${msg.user}`, error.message);
-            userCache.set(msg.user, msg.user); // Use ID as fallback
+            userCache.set(msg.user, msg.user);
           }
         }
 
@@ -103,60 +160,76 @@ class SummaryBot {
     }
   }
 
-  // let the ai make sense of all this chatter
   async generateSummaryAndQuestions(messages) {
-    if (messages.length === 0) {
+    const stats = this.computeStats(messages);
+
+    if (stats.messageCount === 0) {
       return {
-        summary: "No activity detected in the channel during this period.",
+        insufficient: true,
+        insufficient_reason: "No user messages in range.",
+        summary: "Quiet period with limited activity; not enough to synthesize a reliable summary.",
         questions: [],
         concept_trends: [],
         metacognitive_insights: "",
-        unresolved_issues: []
+        unresolved_issues: [],
+        stats
       };
     }
+
+    const meetsThresholds =
+      stats.messageCount >= this.minMessages &&
+      stats.uniqueUserCount >= this.minUniqueUsers;
+
+    const groups = this.segmentByGap(messages, this.gapMinutes);
+    const formattedMessages = groups.map((group, idx) => {
+      const lines = group.map(msg =>
+        `[${msg.timestamp}] ${msg.userName}: ${(msg.text || '').replace(/\s+/g, ' ').trim()}`
+      ).join('\n');
+      return `=== Segment ${idx + 1} ===\n${lines}`;
+    }).join('\n\n');
 
     try {
       log.openai('Generating conversation analysis and insights');
 
-      // prep the messages for ai analysis
-      const formattedMessages = messages.map(msg =>
-        `[${msg.timestamp}] ${msg.userName}: ${msg.text}`
-      ).join('\n\n');
-
       const systemPrompt = `
-        FUNCTION
-        Analyze educational Slack channel conversation data. Extract patterns in student questions and conceptual difficulties.
-        Maintain academic precision. Avoid conversational language. Focus on technical analysis of learning patterns.
+FUNCTION
+Analyze Slack channel conversation data. Be strictly evidence-bound; avoid speculation.
 
-        OUTPUT REQUIREMENTS
-        1. Produce a concise summary (max 300 words) of key topics and discussions
-        2. Identify specific patterns in student questions with precise categorization
-        3. Analyze cognitive barriers and conceptual obstacles based on evidence in the conversation
-        4. Formulate 3-5 targeted questions that address core conceptual challenges
-        5. Document unresolved technical issues from the conversation
+OUTPUT JSON SHAPE
+{
+  "summary": string,                   // <= 250 words, chronological if multiple segments
+  "concept_trends": string[],          // evidence-backed patterns
+  "metacognitive_insights": string,    // grounded in observed messages
+  "questions": string[],               // 3–5 targeted follow-ups
+  "unresolved_issues": string[],
+  "insufficient": boolean,
+  "insufficient_reason": string,
+  "stats": { "messageCount": number, "uniqueUserCount": number, "firstTs": string, "lastTs": string }
+}
 
-        RESPONSE PROTOCOL
-        - Eliminate subjective assessments
-        - Focus on observable patterns in the data
-        - Cite specific examples from the conversation when possible
-        - Maintain technical precision in all analyses
-        - Avoid speculative content where data is insufficient
+RULES
+- If evidence is thin (few messages or one participant), set "insufficient": true and keep arrays empty.
+- Quote only short snippets (<=15 words) when citing.
+- Eliminate subjective language; focus on observable patterns.
+      `;
 
-        Format response as JSON with the following structure:
-        {
-          "summary": "Technical summary of key topics and discussions",
-          "concept_trends": ["Trend 1: Specific description with evidence", "Trend 2: Specific description with evidence"],
-          "metacognitive_insights": "Analysis of cognitive barriers and conceptual obstacles",
-          "questions": ["Targeted question 1", "Targeted question 2", "Targeted question 3"],
-          "unresolved_issues": ["Unresolved issue 1", "Unresolved issue 2"]
-        }
+      const userPrompt = `
+STATS
+- messageCount: ${stats.messageCount}
+- uniqueUserCount: ${stats.uniqueUserCount}
+- firstTimestamp: ${stats.firstTs}
+- lastTimestamp: ${stats.lastTs}
+- meetsThresholds: ${meetsThresholds}
+
+MESSAGES (chronological, segmented by inactivity/day change):
+${formattedMessages}
       `;
 
       const response = await this.openai.chat.completions.create({
         model: "gpt-4o",
         messages: [
           { role: "system", content: systemPrompt },
-          { role: "user", content: `Here is the conversation history from the last ${this.messageHistoryHours} hours:\n\n${formattedMessages}` }
+          { role: "user", content: userPrompt }
         ],
         response_format: { type: "json_object" }
       });
@@ -164,32 +237,56 @@ class SummaryBot {
       const content = response.choices[0]?.message?.content || '{}';
       const result = JSON.parse(content);
 
+      if (!meetsThresholds) {
+        return {
+          insufficient: true,
+          insufficient_reason: result.insufficient_reason || "Activity below minimum thresholds.",
+          summary: "Quiet period with limited activity; not enough to synthesize a reliable summary.",
+          questions: [],
+          concept_trends: [],
+          metacognitive_insights: "",
+          unresolved_issues: [],
+          stats
+        };
+      }
+
       log.success('Analysis completed successfully');
       return {
+        insufficient: !!result.insufficient,
+        insufficient_reason: result.insufficient_reason || "",
         summary: result.summary || "No summary generated.",
-        questions: result.questions || [],
-        unresolved_issues: result.unresolved_issues || [],
-        concept_trends: result.concept_trends || [],
-        metacognitive_insights: result.metacognitive_insights || ""
+        questions: Array.isArray(result.questions) ? result.questions : [],
+        unresolved_issues: Array.isArray(result.unresolved_issues) ? result.unresolved_issues : [],
+        concept_trends: Array.isArray(result.concept_trends) ? result.concept_trends : [],
+        metacognitive_insights: result.metacognitive_insights || "",
+        stats
       };
     } catch (error) {
       log.error('Failed to generate summary and analysis', error);
       return {
+        insufficient: true,
+        insufficient_reason: "OpenAI error",
         summary: "Error generating summary.",
         questions: [],
         unresolved_issues: [],
         concept_trends: [],
-        metacognitive_insights: ""
+        metacognitive_insights: "",
+        stats
       };
     }
   }
 
-  // make it pretty for slack
-  formatSlackMessage(data) {
-    const { summary, questions, unresolved_issues, concept_trends, metacognitive_insights } = data;
+  formatSlackMessage(data, header = '*Channel Activity Analysis*') {
+    const { summary, questions, unresolved_issues, concept_trends, metacognitive_insights, insufficient, insufficient_reason, stats } = data;
 
-    let message = `*Channel Activity Analysis (Last ${this.messageHistoryHours} Hours)*\n\n`;
+    if (insufficient) {
+      let message = `*Channel Activity Status*\n\n`;
+      message += `📭 Quiet period.`;
+      message += `\n_Generated ${new Date().toISOString()}_`;
+      return message;
+    }
 
+    let message = `${header}\n\n`;
     message += `*Summary:*\n${summary}\n\n`;
 
     if (concept_trends && concept_trends.length > 0) {
@@ -223,20 +320,36 @@ class SummaryBot {
     return message;
   }
 
-  // analyze and post
-  async generateAndPostSummary() {
+  async generateAndPostSummary({ oldestTsSec, header }) {
     try {
       log.bot('summary', 'Starting comprehensive channel analysis');
 
-      const messages = await this.fetchChannelHistory();
+      const messages = await this.fetchChannelHistory(this.messageHistoryHours, oldestTsSec);
       if (messages.length === 0) {
-        log.info('No messages found in specified time period');
+        log.info('No messages found in specified range; posting quiet status');
+        const quiet = {
+          insufficient: true,
+          insufficient_reason: "No user messages in range.",
+          summary: "Quiet period with limited activity; not enough to synthesize a reliable summary.",
+          questions: [],
+          unresolved_issues: [],
+          concept_trends: [],
+          metacognitive_insights: "",
+          stats: this.computeStats(messages)
+        };
+        const formattedQuiet = this.formatSlackMessage(quiet, header || '*Channel Activity Status*');
+        await this.slackClient.chat.postMessage({
+          channel: this.channelId,
+          text: formattedQuiet,
+          unfurl_links: false,
+          unfurl_media: false
+        });
         return;
       }
 
       const enrichedMessages = await this.enrichMessagesWithUserInfo(messages);
       const summaryData = await this.generateSummaryAndQuestions(enrichedMessages);
-      const formattedMessage = this.formatSlackMessage(summaryData);
+      const formattedMessage = this.formatSlackMessage(summaryData, header || '*Channel Activity Analysis*');
 
       log.slack('Posting analysis to channel');
       await this.slackClient.chat.postMessage({
@@ -252,36 +365,88 @@ class SummaryBot {
     }
   }
 
-  // set up automatic summaries
+  async runWeeklySummary() {
+    let oldestTsSec;
+    
+    if (this.enableCheckpointing) {
+      const lastWeeklyIso = this.checkpoints.get('weekly');
+      oldestTsSec = lastWeeklyIso ? Math.floor(new Date(lastWeeklyIso).getTime() / 1000) : undefined;
+    } else {
+      // Fallback to 7-day window when checkpointing is disabled
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      oldestTsSec = Math.floor(sevenDaysAgo.getTime() / 1000);
+    }
+
+    await this.generateAndPostSummary({
+      oldestTsSec,
+      header: '*Weekly Channel Summary*'
+    });
+
+    if (this.enableCheckpointing) {
+      this.checkpoints.set('weekly', new Date().toISOString());
+    }
+  }
+
+  async runManualSummary(triggerChannel, replyToTs) {
+    let oldestTsSec;
+    let statusMessage;
+    
+    if (this.enableCheckpointing) {
+      const weeklyIso = this.checkpoints.get('weekly');
+      const manualIso = this.checkpoints.get('manual');
+      const startIso = [weeklyIso, manualIso].filter(Boolean).sort().at(-1) || null;
+      oldestTsSec = startIso ? Math.floor(new Date(startIso).getTime() / 1000) : undefined;
+      statusMessage = "🔄 Summarizing messages since the last summary checkpoint...";
+    } else {
+      // Fallback to default time window when checkpointing is disabled
+      oldestTsSec = undefined; // Will use MESSAGE_HISTORY_HOURS
+      statusMessage = `🔄 Summarizing the last ${this.messageHistoryHours} hours of messages...`;
+    }
+
+    await this.slackClient.chat.postMessage({
+      channel: triggerChannel,
+      thread_ts: replyToTs,
+      text: statusMessage
+    });
+
+    await this.generateAndPostSummary({
+      oldestTsSec,
+      header: '*On-Demand Channel Summary*'
+    });
+
+    if (this.enableCheckpointing) {
+      this.checkpoints.set('manual', new Date().toISOString());
+    }
+  }
+
   setupScheduledSummaries() {
     if (this.summarySchedule) {
       cron.schedule(this.summarySchedule, async () => {
-        log.info('Scheduled summary generation triggered');
-        await this.generateAndPostSummary();
+        log.info('Scheduled summary generation triggered (legacy interval)');
+        await this.generateAndPostSummary({ oldestTsSec: undefined, header: '*Scheduled Channel Summary*' });
       });
       log.info(`Scheduled summaries configured: ${this.summarySchedule}`);
     }
   }
 
-  // check if someone's asking for a summary
+  setupScheduledWeeklySummary() {
+    if (this.weeklySchedule) {
+      cron.schedule(this.weeklySchedule, async () => {
+        log.info('Scheduled weekly summary triggered');
+        await this.runWeeklySummary();
+      });
+      log.info(`Weekly summaries configured: ${this.weeklySchedule}`);
+    }
+  }
+
   async handleSummaryRequest(event) {
     const text = event.text?.toLowerCase() || '';
     const summaryTriggers = ['summary please', 'summarize channel', 'channel summary', 'generate summary'];
-
-    const isTriggered = summaryTriggers.some(trigger => text.includes(trigger));
+    const isTriggered = summaryTriggers.some(trigger => text.includes(trigger)) || /<@[\w]+>/.test(text); // allow @mention
 
     if (isTriggered) {
       log.bot('summary', 'Manual summary request detected');
-
-      // let them know we're on it
-      await this.slackClient.chat.postMessage({
-        channel: event.channel,
-        thread_ts: event.ts,
-        text: "🔄 Initiating channel analysis. Processing conversation history..."
-      });
-
-      // Generate summary
-      await this.generateAndPostSummary();
+      await this.runManualSummary(event.channel, event.ts);
       return true;
     }
 

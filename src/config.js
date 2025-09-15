@@ -20,9 +20,16 @@ const OPENAI_ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID;
 const PORT = parseInt(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
-// Bot Behavior Configuration
-const MESSAGE_HISTORY_HOURS = parseInt(process.env.MESSAGE_HISTORY_HOURS) || 24;
-const SUMMARY_SCHEDULE = process.env.SUMMARY_SCHEDULE || '0 18 * * 1-5'; // 6 PM Monday-Friday
+// Bot Behavior Configuration (with sane defaults, overridable via env)
+const MESSAGE_HISTORY_HOURS = parseInt(process.env.MESSAGE_HISTORY_HOURS || '24');
+const SUMMARY_SCHEDULE = process.env.SUMMARY_SCHEDULE || '0 18 * * 1-5'; // 6 PM Mon-Fri
+const SUMMARY_SCHEDULE_WEEKLY = process.env.SUMMARY_SCHEDULE_WEEKLY || '0 17 * * FRI'; // Fri 5pm local
+const SUMMARY_MIN_MESSAGES = parseInt(process.env.SUMMARY_MIN_MESSAGES || '3');
+const SUMMARY_MIN_UNIQUE_USERS = parseInt(process.env.SUMMARY_MIN_UNIQUE_USERS || '2');
+const SUMMARY_GAP_MINUTES = parseInt(process.env.SUMMARY_GAP_MINUTES || '90');
+const CHECKPOINT_PATH = process.env.CHECKPOINT_PATH || './data/summary_checkpoints.json';
+const ENABLE_CHECKPOINTING = process.env.ENABLE_CHECKPOINTING !== 'false'; // default true, set to 'false' to disable
+
 
 // Development/Debug Configuration
 const NODE_ENV = process.env.NODE_ENV;
@@ -36,10 +43,13 @@ const IS_SOCKET_MODE = SLACK_MODE !== 'http';
 const REQUIRED_ENV_VARS = [
   'SLACK_BOT_TOKEN',
   'SLACK_USER_TOKEN',
-  'SLACK_SIGNING_SECRET',
+  'SLACK_CLIENT_ID',
+  'SLACK_CLIENT_SECRET',
   'SLACK_CHANNEL_ID',
   'OPENAI_API_KEY',
   'OPENAI_ASSISTANT_ID',
+  // Only required in HTTP mode
+  ...(!IS_SOCKET_MODE ? ['SLACK_SIGNING_SECRET'] : []),
 ];
 
 // Additional required vars for socket mode
@@ -67,6 +77,12 @@ module.exports = {
   // Bot behavior
   MESSAGE_HISTORY_HOURS,
   SUMMARY_SCHEDULE,
+  SUMMARY_SCHEDULE_WEEKLY,
+  SUMMARY_MIN_MESSAGES,
+  SUMMARY_MIN_UNIQUE_USERS,
+  SUMMARY_GAP_MINUTES,
+  CHECKPOINT_PATH,
+  ENABLE_CHECKPOINTING,
 
   // Development
   NODE_ENV,
